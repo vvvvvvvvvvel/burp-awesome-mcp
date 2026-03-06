@@ -3,7 +3,7 @@ name: Awesome MCP Burp Operations
 description: Use this skill when the user asks to operate Burp Suite through Awesome MCP, including traffic querying, scope control, active HTTP testing, Repeater/Intruder/Organizer workflows, scanner orchestration, collaborator checks, and cookie jar operations.
 metadata:
   author: vvvvvvvvvvel
-  version: "1.0.0"
+  version: "1.0.1"
 ---
 
 # Awesome MCP Burp Operations

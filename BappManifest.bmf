@@ -2,8 +2,8 @@ Uuid: 488f0f48652f490d85039cbd07edb99f
 ExtensionType: 1
 Name: Awesome MCP
 RepoName: burp-awesome-mcp
-ScreenVersion: 1.0.0
-SerialVersion: 8
+ScreenVersion: 1.0.1
+SerialVersion: 9
 MinPlatformVersion: 2
 ProOnly: False
 Author: vvvvvvvvvvel
