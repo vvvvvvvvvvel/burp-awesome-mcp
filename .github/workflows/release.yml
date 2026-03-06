@@ -44,13 +44,20 @@ jobs:
             exit 1
           fi
 
+          TAG_COMMIT="$(git rev-parse "${TAG}^{commit}")"
+          if [[ -z "$TAG_COMMIT" ]]; then
+            echo "Unable to resolve commit for tag: $TAG"
+            exit 1
+          fi
+
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag_commit=$TAG_COMMIT" >> "$GITHUB_OUTPUT"
 
       - name: Verify tag commit is on main
         run: |
           git fetch --no-tags origin main
-          if ! git merge-base --is-ancestor "${GITHUB_SHA}" "origin/main"; then
+          if ! git merge-base --is-ancestor "${{ steps.meta.outputs.tag_commit }}" "origin/main"; then
             echo "Release tags must point to a commit reachable from origin/main"
             exit 1
           fi
@@ -80,32 +87,28 @@ jobs:
 
           cp "build/libs/burp-awesome-mcp.jar" "$RELEASE_DIR/$JAR_NAME"
           cp "skills/SKILL.md" "$RELEASE_DIR/SKILL.md"
-          cp "skills/SKILL.t.md" "$RELEASE_DIR/SKILL.t.md"
-          cp "BappManifest.bmf" "$RELEASE_DIR/BappManifest.bmf"
-          cp "BappDescription.html" "$RELEASE_DIR/BappDescription.html"
-          cp "README.md" "$RELEASE_DIR/README.md"
-          cp "LICENSE" "$RELEASE_DIR/LICENSE"
-
-          (
-            cd "$RELEASE_DIR"
-            sha256sum "$JAR_NAME" SKILL.md SKILL.t.md BappManifest.bmf BappDescription.html README.md LICENSE > SHA256SUMS.txt
-            tar -czf "awesome-mcp-${VERSION}-bundle.tar.gz" "$JAR_NAME" SKILL.md SKILL.t.md BappManifest.bmf BappDescription.html README.md LICENSE SHA256SUMS.txt
-          )
-
           echo "jar_path=$RELEASE_DIR/$JAR_NAME" >> "$GITHUB_OUTPUT"
+          echo "skill_path=$RELEASE_DIR/SKILL.md" >> "$GITHUB_OUTPUT"
 
-      - name: Sign release assets (optional)
-        if: ${{ secrets.RELEASE_SIGNING_PRIVATE_KEY != '' }}
+      - name: Sign release assets
         env:
           RELEASE_SIGNING_PRIVATE_KEY: ${{ secrets.RELEASE_SIGNING_PRIVATE_KEY }}
         run: |
-          RELEASE_DIR="build/release"
+          if [[ -z "${RELEASE_SIGNING_PRIVATE_KEY:-}" ]]; then
+            echo "Missing required secret: RELEASE_SIGNING_PRIVATE_KEY"
+            exit 1
+          fi
+
           KEY_FILE="$RUNNER_TEMP/release_signing_key.pem"
           printf '%s' "$RELEASE_SIGNING_PRIVATE_KEY" > "$KEY_FILE"
 
-          while IFS= read -r file; do
-            openssl pkeyutl -sign -inkey "$KEY_FILE" -rawin -in "$file" -out "${file}.sig"
-          done < <(find "$RELEASE_DIR" -maxdepth 1 -type f ! -name '*.sig' | sort)
+          openssl pkeyutl -sign -inkey "$KEY_FILE" -rawin \
+            -in "${{ steps.assets.outputs.jar_path }}" \
+            -out "${{ steps.assets.outputs.jar_path }}.sig"
+
+          openssl pkeyutl -sign -inkey "$KEY_FILE" -rawin \
+            -in "${{ steps.assets.outputs.skill_path }}" \
+            -out "${{ steps.assets.outputs.skill_path }}.sig"
 
           rm -f "$KEY_FILE"
 
@@ -121,9 +124,9 @@ jobs:
         uses: caido/action-release@v1
         with:
           tag: ${{ steps.meta.outputs.tag }}
-          commit: ${{ github.sha }}
+          commit: ${{ steps.meta.outputs.tag_commit }}
           body: Awesome MCP release ${{ steps.meta.outputs.version }}
-          artifacts: build/release/*
+          artifacts: ${{ steps.assets.outputs.jar_path }},${{ steps.assets.outputs.skill_path }},${{ steps.assets.outputs.jar_path }}.sig,${{ steps.assets.outputs.skill_path }}.sig
           allowUpdates: true
           replacesArtifacts: true
           artifactErrorsFailBuild: true

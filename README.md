@@ -396,7 +396,6 @@ CI runs on push/PR/workflow_dispatch and executes:
 CI publishes build artifacts:
 - `build/libs/burp-awesome-mcp.jar`
 - `skills/SKILL.md`
-- `skills/SKILL.t.md`
 - `BappManifest.bmf`
 - `BappDescription.html`
 
@@ -418,17 +417,15 @@ Release workflow verifies:
 
 Release assets include:
 - versioned jar: `burp-awesome-mcp-<version>.jar`
-- `SKILL.md` and `SKILL.t.md`
-- `BappManifest.bmf`
-- `BappDescription.html`
-- `README.md`
-- `LICENSE`
-- `SHA256SUMS.txt`
-- `awesome-mcp-<version>-bundle.tar.gz`
-- optional `.sig` files (when `RELEASE_SIGNING_PRIVATE_KEY` secret is configured)
+- `SKILL.md`
+- `burp-awesome-mcp-<version>.jar.sig`
+- `SKILL.md.sig`
 
-Optional signing secret:
+Required signing secret:
 - `RELEASE_SIGNING_PRIVATE_KEY` (PEM private key used by `openssl pkeyutl -sign`)
+
+Note:
+- GitHub still adds default source archives (`Source code (zip)` / `Source code (tar.gz)`) automatically for every tag release.
 
 Version bump and tagging helper:
 ```bash
