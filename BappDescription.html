@@ -1,0 +1,37 @@
+<p>
+	<strong>Awesome MCP</strong> runs a Model Context Protocol (MCP) server directly inside Burp Suite and exposes
+	agent-friendly tools for real pentest workflows.
+</p>
+
+<p>
+	It is designed for <em>human + AI agent</em> collaboration with stable IDs, strict JSON contracts, safe body
+	serialization, and practical integrations with Burp history, Repeater, Intruder, scope and Collaborator.
+</p>
+
+<h2>Key Features</h2>
+<ul>
+	<li>Stable Proxy history IDs and Site Map keys for deterministic follow-up actions</li>
+	<li>Pagination-safe query responses: <code class="InlineCode">total</code>, <code class="InlineCode">next</code>, <code class="InlineCode">results</code></li>
+	<li>Smart body serialization: omit large text by default, optional truncation, binary omitted by default</li>
+	<li>Bulk HTTP/1.1 and HTTP/2 request execution with optional parallel mode and rate limiting</li>
+	<li>Send requests to Repeater and Intruder, including Intruder insertion-point templates</li>
+	<li>Scope management tools, including optional subdomain scope rule updates</li>
+	<li>Cookie Jar query/set/expire tools for session-aware agent workflows</li>
+	<li>Collaborator tooling and scanner issue querying (Burp Professional only)</li>
+</ul>
+
+<h2>Usage</h2>
+<ol>
+	<li>Open the <strong>Awesome MCP</strong> Burp tab and enable the server with the toggle.</li>
+	<li>Set host, port and transport; click <strong>Apply</strong> to apply endpoint settings.</li>
+	<li>Copy endpoint URL and connect your MCP client.</li>
+</ol>
+
+<p>
+	Default endpoint (streamable_http): <code class="InlineCode">http://127.0.0.1:26001/mcp</code><br>
+	Optional SSE endpoint: <code class="InlineCode">http://127.0.0.1:26001</code>
+</p>
+
+<p>
+	For protocol details see <a href="https://modelcontextprotocol.io/">modelcontextprotocol.io</a>.
+</p>

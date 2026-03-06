@@ -1,0 +1,13 @@
+Uuid: 488f0f48652f490d85039cbd07edb99f
+ExtensionType: 1
+Name: Awesome MCP
+RepoName: burp-awesome-mcp
+ScreenVersion: 1.0.0
+SerialVersion: 8
+MinPlatformVersion: 2
+ProOnly: False
+Author: vvvvvvvvvvel
+ShortDescription: Agent-optimized MCP server for Burp Suite with stable history IDs, smart serialization, scope controls and pentest automation tools.
+EntryPoint: burp-awesome-mcp.jar
+BuildCommand: ./gradlew clean test integrationTest shadowJar
+SupportedProducts: Pro, Community

@@ -1,0 +1,130 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve release metadata
+        id: meta
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          if [[ -z "$TAG" ]]; then
+            echo "Unable to resolve release tag from GITHUB_REF_NAME"
+            exit 1
+          fi
+
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Tag must match v<major>.<minor>.<patch>, got: $TAG"
+            exit 1
+          fi
+
+          VERSION="${TAG#v}"
+          PROP_VERSION="$(awk -F= '/^version=/{print $2}' gradle.properties)"
+          if [[ "$VERSION" != "$PROP_VERSION" ]]; then
+            echo "Version mismatch: tag=$VERSION gradle.properties=$PROP_VERSION"
+            exit 1
+          fi
+
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Verify tag commit is on main
+        run: |
+          git fetch --no-tags origin main
+          if ! git merge-base --is-ancestor "${GITHUB_SHA}" "origin/main"; then
+            echo "Release tags must point to a commit reachable from origin/main"
+            exit 1
+          fi
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build and verify release candidate
+        run: |
+          chmod +x ./gradlew
+          ./gradlew clean test integrationTest ktlintCheck shadowJar --no-daemon --stacktrace
+
+      - name: Prepare release assets
+        id: assets
+        run: |
+          VERSION="${{ steps.meta.outputs.version }}"
+          RELEASE_DIR="build/release"
+          JAR_NAME="burp-awesome-mcp-${VERSION}.jar"
+          mkdir -p "$RELEASE_DIR"
+
+          cp "build/libs/burp-awesome-mcp.jar" "$RELEASE_DIR/$JAR_NAME"
+          cp "skills/SKILL.md" "$RELEASE_DIR/SKILL.md"
+          cp "skills/SKILL.t.md" "$RELEASE_DIR/SKILL.t.md"
+          cp "BappManifest.bmf" "$RELEASE_DIR/BappManifest.bmf"
+          cp "BappDescription.html" "$RELEASE_DIR/BappDescription.html"
+          cp "README.md" "$RELEASE_DIR/README.md"
+          cp "LICENSE" "$RELEASE_DIR/LICENSE"
+
+          (
+            cd "$RELEASE_DIR"
+            sha256sum "$JAR_NAME" SKILL.md SKILL.t.md BappManifest.bmf BappDescription.html README.md LICENSE > SHA256SUMS.txt
+            tar -czf "awesome-mcp-${VERSION}-bundle.tar.gz" "$JAR_NAME" SKILL.md SKILL.t.md BappManifest.bmf BappDescription.html README.md LICENSE SHA256SUMS.txt
+          )
+
+          echo "jar_path=$RELEASE_DIR/$JAR_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Sign release assets (optional)
+        if: ${{ secrets.RELEASE_SIGNING_PRIVATE_KEY != '' }}
+        env:
+          RELEASE_SIGNING_PRIVATE_KEY: ${{ secrets.RELEASE_SIGNING_PRIVATE_KEY }}
+        run: |
+          RELEASE_DIR="build/release"
+          KEY_FILE="$RUNNER_TEMP/release_signing_key.pem"
+          printf '%s' "$RELEASE_SIGNING_PRIVATE_KEY" > "$KEY_FILE"
+
+          while IFS= read -r file; do
+            openssl pkeyutl -sign -inkey "$KEY_FILE" -rawin -in "$file" -out "${file}.sig"
+          done < <(find "$RELEASE_DIR" -maxdepth 1 -type f ! -name '*.sig' | sort)
+
+          rm -f "$KEY_FILE"
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: awesome-mcp-release-${{ steps.meta.outputs.version }}
+          if-no-files-found: error
+          path: |
+            build/release/*
+
+      - name: Create immutable release
+        uses: caido/action-release@v1
+        with:
+          tag: ${{ steps.meta.outputs.tag }}
+          commit: ${{ github.sha }}
+          body: Awesome MCP release ${{ steps.meta.outputs.version }}
+          artifacts: build/release/*
+          allowUpdates: true
+          replacesArtifacts: true
+          artifactErrorsFailBuild: true
+          immutableCreate: true

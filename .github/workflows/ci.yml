@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Verify wrapper executable
+        run: chmod +x ./gradlew
+
+      - name: Build and verify
+        run: ./gradlew clean test integrationTest ktlintCheck shadowJar --no-daemon --stacktrace
+
+      - name: Verify release-critical files
+        run: |
+          test -f build/libs/burp-awesome-mcp.jar
+          test -f skills/SKILL.md
+          test -f skills/SKILL.t.md
+          test -f BappManifest.bmf
+          test -f BappDescription.html
+          grep -q '^EntryPoint: burp-awesome-mcp.jar$' BappManifest.bmf
+
+      - name: Upload CI artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: awesome-mcp-ci-${{ github.run_number }}
+          if-no-files-found: error
+          path: |
+            build/libs/burp-awesome-mcp.jar
+            skills/SKILL.md
+            skills/SKILL.t.md
+            BappManifest.bmf
+            BappDescription.html
+            README.md
+            LICENSE
+            tests_log.txt

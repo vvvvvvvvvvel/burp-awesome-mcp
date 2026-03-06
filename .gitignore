@@ -1,0 +1,39 @@
+# Gradle / Kotlin
+.gradle*/
+build/
+.kotlinc/
+.kotlin/
+
+# Gradle wrapper
+!gradle/wrapper/gradle-wrapper.jar
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+out/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local artifacts / logs
+test-artifacts/
+tests_log.txt
+*.log
+
+# Generated outputs in nested modules
+**/build/
+**/out/
+
+# Keep source trees tracked
+!**/src/main/**
+!**/src/test/**
+api-doc
+inspection
+/libs/*.jar
+**/*.t.md
+Inspection_profile.xml
+help.md
