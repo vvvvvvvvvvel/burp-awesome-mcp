@@ -342,43 +342,28 @@ Log payload includes:
 ## Build
 
 ```bash
-./gradlew buildWithTests
+./gradlew buildPlugin
 ```
 
-Sandbox-friendly variant:
+Main tasks:
 ```bash
-GRADLE_USER_HOME=/tmp/gradle-home ./gradlew buildWithTests
+# build + unit tests
+./gradlew buildWithTests
+
+# build + integration tests
+./gradlew buildWithIntegrationTests
+
+# lint + format
+./gradlew lintAndFormat
 ```
 
 Artifact:
 - `build/libs/burp-awesome-mcp.jar`
 
-Predefined build profiles:
-```bash
-# 1) build only (no tests)
-./gradlew buildPlugin
-
-# 2) build + regular tests
-./gradlew buildWithTests
-
-# 3) build + integration tests
-./gradlew buildWithIntegrationTests
-
-# 4) linters + formatters
-./gradlew lintAndFormat
-```
-
-Lint/format:
-```bash
-./gradlew ktlintCheck
-./gradlew ktlintFormat
-```
-
 Debug build switch:
 - default build is release-like and suppresses MCP Debug events in Burp Event log
 - Burp Output logging stays enabled in all builds
-- pass `-Pawesome.debug=true` to enable MCP debug events in Burp Event log
-- example:
+- pass `-Pawesome.debug=true` to enable MCP Debug events in Burp Event log
 ```bash
 ./gradlew buildPlugin -Pawesome.debug=true
 ```
@@ -393,12 +378,6 @@ CI runs on push/PR/workflow_dispatch and executes:
 ./gradlew clean test integrationTest ktlintCheck shadowJar
 ```
 
-CI publishes build artifacts:
-- `build/libs/burp-awesome-mcp.jar`
-- `skills/SKILL.md`
-- `BappManifest.bmf`
-- `BappDescription.html`
-
 ## Release
 
 GitHub release workflow:
@@ -406,9 +385,6 @@ GitHub release workflow:
 
 Release trigger:
 - push tag matching `v*` (for example `v1.2.3`)
-
-Immutable release mode:
-- workflow publishes through `caido/action-release` with `immutableCreate=true`
 
 Release workflow verifies:
 - tag format is `v<major>.<minor>.<patch>`
@@ -424,27 +400,14 @@ Release assets include:
 Required signing secret:
 - `RELEASE_SIGNING_PRIVATE_KEY` (PEM private key used by `openssl pkeyutl -sign`)
 
-Note:
-- GitHub still adds default source archives (`Source code (zip)` / `Source code (tar.gz)`) automatically for every tag release.
-
 Version bump and tagging helper:
 ```bash
 # patch bump, run checks, commit+tag, push
 ./scripts/release.sh --part patch --push
 
-# explicit version, commit+tag, push and create GH release via gh cli
+# explicit version
 ./scripts/release.sh --version 1.2.3 --push --create-gh-release
 ```
-
-Release flow recommendation:
-- preferred: push tag and let `.github/workflows/release.yml` publish immutable release assets
-- optional fallback: `--create-gh-release` for manual local release creation via `gh` CLI
-
-Useful flags:
-- `--skip-checks`
-- `--allow-dirty`
-- `--dry-run`
-- `--remote <name>`
 
 ## Load into Burp
 
@@ -457,20 +420,20 @@ Useful flags:
 
 ## Tests
 
-Run:
+Run regular tests:
 ```bash
-GRADLE_USER_HOME=/tmp/gradle-home ./gradlew test --rerun-tasks
+./gradlew test --rerun-tasks
 ```
 This runs regular tests only (classes matching `*IntegrationTest` are excluded).
 
 Run non-live integration tests:
 ```bash
-GRADLE_USER_HOME=/tmp/gradle-home ./gradlew integrationTest --rerun-tasks
+./gradlew integrationTest --rerun-tasks
 ```
 
 Live Burp integration tests (against a running Burp with Awesome MCP enabled):
 ```bash
-GRADLE_USER_HOME=/tmp/gradle-home ./gradlew liveBurpTest \
+./gradlew liveBurpTest \
   --tests "*LiveBurpMcpIntegrationTest" \
   -Dawesome.mcp.live.url=http://127.0.0.1:26001/mcp \
   -Dawesome.mcp.live.transport=streamable_http
@@ -490,7 +453,7 @@ If you want to run live test over SSE instead:
 
 Run all integration tests including live in one pass:
 ```bash
-GRADLE_USER_HOME=/tmp/gradle-home ./gradlew buildWithIntegrationTests \
+./gradlew buildWithIntegrationTests \
   -Pawesome.live=true \
   -Dawesome.mcp.live.url=http://127.0.0.1:26001/mcp \
   -Dawesome.mcp.live.transport=streamable_http
@@ -505,35 +468,10 @@ Generated logs:
 - `tests_log.txt` — full test execution + per-test output
 - `test-artifacts/mcp-integration-trace.log` — MCP integration request/response trace
 
-## IntelliJ IDEA profiles
-
-1. Open `Run | Edit Configurations...`
-2. Add new configuration: `Gradle`
-3. Set:
-   - `Gradle project`: `burp-awesome-mcp`
-   - `Run`: task name from below
-   - `Environment`: `GRADLE_USER_HOME=/home/vel/mcp-server-burp/.gradle`
-4. Create these four configs:
-   - `Build only` -> `buildPlugin --rerun-tasks`
-   - `Build + tests` -> `buildWithTests --rerun-tasks`
-   - `Build + integration` -> `buildWithIntegrationTests --rerun-tasks`
-   - `Lint + format` -> `lintAndFormat --rerun-tasks`
-
-Optional live profile:
-- name: `Live Burp test (Streamable HTTP)`
-- task: `liveBurpTest --rerun-tasks`
-- VM options:
-  `-Dawesome.mcp.live.url=http://127.0.0.1:26001/mcp -Dawesome.mcp.live.transport=streamable_http`
-
-## BApp metadata
-
-Project includes:
-- `BappManifest.bmf`
-- `BappDescription.html`
-- `LICENSE` (MIT)
-
-Current author metadata:
-- `vvvvvvvvvvel`
+If you need a custom Gradle cache location, set it per command:
+```bash
+GRADLE_USER_HOME=<custom-cache-dir> ./gradlew <task>
+```
 
 ## Security and operational notes
 
