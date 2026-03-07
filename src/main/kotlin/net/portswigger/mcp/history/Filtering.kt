@@ -21,6 +21,11 @@ internal data class CompiledRequestResponseFilter(
     val timeTo: Instant?,
 )
 
+internal data class CompiledProxyHttpHistoryFilter(
+    val requestResponse: CompiledRequestResponseFilter,
+    val listenerPorts: Set<Int>?,
+)
+
 internal data class CompiledWebSocketFilter(
     val inScopeOnly: Boolean,
     val directions: Set<String>?,
@@ -81,6 +86,12 @@ internal fun compileRequestResponseFilter(input: HttpRequestResponseFilterInput)
     )
 }
 
+internal fun compileProxyHttpHistoryFilter(input: ProxyHttpHistoryFilterInput): CompiledProxyHttpHistoryFilter =
+    CompiledProxyHttpHistoryFilter(
+        requestResponse = compileRequestResponseFilter(input.toRequestResponseFilterInput()),
+        listenerPorts = compileListenerPorts(input.listenerPorts),
+    )
+
 internal fun compileWebSocketFilter(input: WebSocketHistoryFilterInput): CompiledWebSocketFilter {
     val directions =
         input.direction
@@ -95,13 +106,6 @@ internal fun compileWebSocketFilter(input: WebSocketHistoryFilterInput): Compile
                 require(ids.all { it >= 0 }) { "filter.web_socket_ids must contain non-negative values" }
             }
     val hostPattern = input.hostRegex?.takeIf { it.isNotBlank() }?.let { compilePattern(it, "filter.host_regex") }
-    val listenerPorts =
-        input.listenerPorts
-            ?.toSet()
-            ?.ifEmpty { null }
-            ?.also { ports ->
-                require(ports.all { it in 1..65535 }) { "filter.listener_ports must be in range 1..65535" }
-            }
     val (timeFrom, timeTo) = parseTimeRange(input.timeFrom, input.timeTo)
 
     return CompiledWebSocketFilter(
@@ -109,12 +113,20 @@ internal fun compileWebSocketFilter(input: WebSocketHistoryFilterInput): Compile
         directions = directions,
         webSocketIds = webSocketIds,
         hostPattern = hostPattern,
-        listenerPorts = listenerPorts,
+        listenerPorts = compileListenerPorts(input.listenerPorts),
         hasEditedPayload = input.hasEditedPayload,
         timeFrom = timeFrom,
         timeTo = timeTo,
     )
 }
+
+private fun compileListenerPorts(listenerPorts: List<Int>?): Set<Int>? =
+    listenerPorts
+        ?.toSet()
+        ?.ifEmpty { null }
+        ?.also { ports ->
+            require(ports.all { it in 1..65535 }) { "filter.listener_ports must be in range 1..65535" }
+        }
 
 internal fun matchesRequestResponseFilter(
     filter: CompiledRequestResponseFilter,

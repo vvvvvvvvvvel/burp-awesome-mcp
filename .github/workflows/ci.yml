@@ -43,6 +43,7 @@ jobs:
         run: |
           test -f build/libs/burp-awesome-mcp.jar
           test -f skills/SKILL.md
+          test -f AGENTS.md
           test -f BappManifest.bmf
           test -f BappDescription.html
           grep -q '^EntryPoint: burp-awesome-mcp.jar$' BappManifest.bmf
@@ -55,6 +56,7 @@ jobs:
           path: |
             build/libs/burp-awesome-mcp.jar
             skills/SKILL.md
+            AGENTS.md
             BappManifest.bmf
             BappDescription.html
             README.md

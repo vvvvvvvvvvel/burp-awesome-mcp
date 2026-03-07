@@ -122,6 +122,7 @@ HTTP transport notes:
 
 Cookie delete note:
 - `expire_cookie_jar_cookie` expires matching cookies (Montoya Cookie Jar has no hard-delete API).
+- `list_cookie_jar.order` accepts only `asc` or `desc`.
 
 ### Burp control and config
 - `set_proxy_intercept_enabled`
@@ -230,7 +231,19 @@ Structured `filter` is supported in:
 - `list_site_map`
 - `list_organizer_items`
 
-HTTP/Site Map `filter` fields:
+HTTP history `filter` fields:
+- `in_scope_only` (boolean, default `true`)
+- `regex` (search across request/response content and annotations)
+- `methods` (array, case-insensitive)
+- `host_regex`
+- `mime_types` (array)
+- `inferred_mime_types` (array)
+- `status_codes` (array)
+- `listener_ports` (array)
+- `has_response` (boolean)
+- `time_from` / `time_to` (ISO-8601 / RFC3339 timestamp)
+
+Site Map / Organizer `filter` fields:
 - `in_scope_only` (boolean, default `true`)
 - `regex` (search across request/response content and annotations)
 - `methods` (array, case-insensitive)
@@ -394,8 +407,10 @@ Release workflow verifies:
 Release assets include:
 - versioned jar: `burp-awesome-mcp-<version>.jar`
 - `SKILL.md`
+- `AGENTS.md`
 - `burp-awesome-mcp-<version>.jar.sig`
 - `SKILL.md.sig`
+- `AGENTS.md.sig`
 
 Required signing secret:
 - `RELEASE_SIGNING_PRIVATE_KEY` (PEM private key used by `openssl pkeyutl -sign`)

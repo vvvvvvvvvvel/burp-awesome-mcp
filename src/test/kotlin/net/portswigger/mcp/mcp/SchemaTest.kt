@@ -238,9 +238,12 @@ class SchemaTest {
     }
 
     @Test
-    fun `http and site map query schemas should expose request response filter defaults`() {
+    fun `history, site map, and websocket query schemas should expose correct filter defaults`() {
         val historySchema = asInputSchema(QueryProxyHttpHistoryInput.serializer())
-        val historyFilter = ((historySchema.properties as JsonObject)["filter"] as JsonObject)["default"] as JsonObject
+        val historyFilterSchema = (historySchema.properties as JsonObject)["filter"] as JsonObject
+        val historyFilterProperties = historyFilterSchema["properties"] as JsonObject
+        val historyFilter = historyFilterSchema["default"] as JsonObject
+        assertTrue(historyFilterProperties.containsKey("listener_ports"))
         assertEquals(JsonPrimitive(true), historyFilter["in_scope_only"])
         assertEquals(JsonNull, historyFilter["regex"])
         assertEquals(JsonNull, historyFilter["methods"])
@@ -251,13 +254,27 @@ class SchemaTest {
         assertEquals(JsonNull, historyFilter["has_response"])
         assertEquals(JsonNull, historyFilter["time_from"])
         assertEquals(JsonNull, historyFilter["time_to"])
+        assertEquals(JsonNull, historyFilter["listener_ports"])
 
         val siteMapSchema = asInputSchema(QuerySiteMapInput.serializer())
         val siteMapProperties = siteMapSchema.properties as JsonObject
         assertTrue(siteMapProperties.containsKey("start_after_key"))
         assertEquals(JsonNull, (siteMapProperties["start_after_key"] as JsonObject)["default"])
-        val siteMapFilter = ((siteMapSchema.properties as JsonObject)["filter"] as JsonObject)["default"] as JsonObject
-        assertEquals(historyFilter, siteMapFilter)
+        val siteMapFilterSchema = ((siteMapSchema.properties as JsonObject)["filter"] as JsonObject)
+        val siteMapFilterProperties = siteMapFilterSchema["properties"] as JsonObject
+        val siteMapFilter = siteMapFilterSchema["default"] as JsonObject
+        assertEquals(JsonPrimitive(true), siteMapFilter["in_scope_only"])
+        assertEquals(JsonNull, siteMapFilter["regex"])
+        assertEquals(JsonNull, siteMapFilter["methods"])
+        assertEquals(JsonNull, siteMapFilter["host_regex"])
+        assertEquals(JsonNull, siteMapFilter["mime_types"])
+        assertEquals(JsonNull, siteMapFilter["inferred_mime_types"])
+        assertEquals(JsonNull, siteMapFilter["status_codes"])
+        assertEquals(JsonNull, siteMapFilter["has_response"])
+        assertEquals(JsonNull, siteMapFilter["time_from"])
+        assertEquals(JsonNull, siteMapFilter["time_to"])
+        assertTrue(!siteMapFilterProperties.containsKey("listener_ports"))
+        assertTrue(!siteMapFilter.containsKey("listener_ports"))
     }
 
     @Test

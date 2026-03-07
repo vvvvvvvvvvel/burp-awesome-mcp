@@ -111,6 +111,7 @@ fun mapHttpHistoryItem(
     return SerializedHttpHistoryEntry(
         id = item.id(),
         time = item.time().toString(),
+        listenerPort = runCatching { item.listenerPort() }.getOrNull(),
         edited = runCatching { item.edited() }.getOrDefault(false),
         notes = runCatching { item.annotations().notes() }.getOrNull()?.takeIf { it.isNotBlank() },
         request = mapRequest(request, options),
@@ -276,12 +277,39 @@ private fun mapResponse(
     response: HttpResponse,
     options: HttpSerializationOptions,
 ): SerializedHttpResponse {
+    val statusCode = runCatching { response.statusCode().toInt() }.getOrDefault(-1)
+    val reasonPhrase = runCatching { response.reasonPhrase() }.getOrNull()
+    val httpVersion = runCatching { response.httpVersion() }.getOrNull()
+
+    if (isSyntheticErrorResponse(statusCode, reasonPhrase, httpVersion)) {
+        return SerializedHttpResponse(
+            statusCode = statusCode,
+            reasonPhrase = reasonPhrase,
+            httpVersion = httpVersion,
+            mimeType = null,
+            statedMimeType = null,
+            inferredMimeType = null,
+            headers = if (options.includeHeaders) emptyMap() else null,
+            cookies = if (options.includeHeaders) emptyList() else null,
+            body =
+                syntheticUnavailableBody(
+                    includeBody = options.includeResponseBody,
+                    omittedReason = "body unavailable for synthetic timeout/error response",
+                ),
+            raw =
+                syntheticUnavailableRaw(
+                    includeRaw = options.includeRawResponse,
+                    omittedReason = "raw response unavailable for synthetic timeout/error response",
+                ),
+        )
+    }
+
     val payloadCapture = capturePayload(response, options.includeHeaders)
 
     return SerializedHttpResponse(
-        statusCode = response.statusCode().toInt(),
-        reasonPhrase = response.reasonPhrase(),
-        httpVersion = response.httpVersion(),
+        statusCode = statusCode,
+        reasonPhrase = reasonPhrase,
+        httpVersion = httpVersion,
         mimeType = runCatching { response.mimeType().name }.getOrNull(),
         statedMimeType = runCatching { response.statedMimeType().name }.getOrNull(),
         inferredMimeType = runCatching { response.inferredMimeType().name }.getOrNull(),
@@ -399,6 +427,52 @@ private fun serializeOptionalRaw(
             maxTextChars = maxRawBodyChars,
             textOverflowMode = TextOverflowMode.TRUNCATE,
             maxBinaryBytes = Int.MAX_VALUE,
+        )
+    } else {
+        null
+    }
+
+private fun isSyntheticErrorResponse(
+    statusCode: Int,
+    reasonPhrase: String?,
+    httpVersion: String?,
+): Boolean {
+    if (statusCode <= 0) {
+        return true
+    }
+
+    val normalizedReason = reasonPhrase?.trim()?.lowercase().orEmpty()
+    val normalizedVersion = httpVersion?.trim().orEmpty()
+    return normalizedVersion.isBlank() && ("timed out" in normalizedReason || "timeout" in normalizedReason)
+}
+
+private fun syntheticUnavailableBody(
+    includeBody: Boolean,
+    omittedReason: String,
+): MessageBodyView =
+    if (includeBody) {
+        MessageBodyView(
+            encoding = BodyEncoding.OMITTED,
+            size = 0,
+            omittedReason = omittedReason,
+        )
+    } else {
+        MessageBodyView(
+            encoding = BodyEncoding.OMITTED,
+            size = 0,
+            omittedReason = "response body excluded by includeResponseBody=false",
+        )
+    }
+
+private fun syntheticUnavailableRaw(
+    includeRaw: Boolean,
+    omittedReason: String,
+): MessageBodyView? =
+    if (includeRaw) {
+        MessageBodyView(
+            encoding = BodyEncoding.OMITTED,
+            size = 0,
+            omittedReason = omittedReason,
         )
     } else {
         null

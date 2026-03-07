@@ -9,6 +9,7 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -229,7 +230,12 @@ class LiveBurpMcpIntegrationTest {
                         mapOf(
                             "limit" to 50,
                             "start_id" to 0,
-                            "filter" to mapOf("in_scope_only" to false, "regex" to runId),
+                            "filter" to
+                                mapOf(
+                                    "in_scope_only" to false,
+                                    "regex" to runId,
+                                    "listener_ports" to listOf(listenerPort),
+                                ),
                             "serialization" to
                                 mapOf(
                                     "include_headers" to true,
@@ -263,6 +269,15 @@ class LiveBurpMcpIntegrationTest {
                     0,
                     nonMatchingEntries,
                     "regex history query returned entries without runId=$runId",
+                )
+                val mismatchedListenerPorts =
+                    regexResults.count { entry ->
+                        entry.jsonObject["listener_port"]?.jsonPrimitive?.intOrNull != listenerPort
+                    }
+                assertEquals(
+                    0,
+                    mismatchedListenerPorts,
+                    "history query returned entries from unexpected listener port",
                 )
 
                 val firstMatchedId =

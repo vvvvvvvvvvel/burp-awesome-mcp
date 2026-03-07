@@ -229,6 +229,7 @@ private val HTTP_SERIALIZATION_DEFAULT = httpSerializationDefault()
 private val SCANNER_HTTP_SERIALIZATION_DEFAULT = scannerHttpSerializationDefault()
 private val WEBSOCKET_SERIALIZATION_DEFAULT = webSocketSerializationDefault()
 private val REQUEST_RESPONSE_FILTER_DEFAULT = requestResponseFilterDefault()
+private val PROXY_HTTP_HISTORY_FILTER_DEFAULT = proxyHttpHistoryFilterDefault()
 private val WEBSOCKET_FILTER_DEFAULT = webSocketFilterDefault()
 
 private fun httpSerializationDefault(): JsonObject =
@@ -283,6 +284,14 @@ private fun requestResponseFilterDefault(): JsonObject =
         ),
     )
 
+private fun proxyHttpHistoryFilterDefault(): JsonObject =
+    JsonObject(
+        REQUEST_RESPONSE_FILTER_DEFAULT +
+            mapOf(
+                "listener_ports" to JsonNull,
+            ),
+    )
+
 private fun webSocketFilterDefault(): JsonObject =
     JsonObject(
         mapOf(
@@ -303,6 +312,7 @@ private fun knownObjectDefault(serialName: String): JsonElement? =
         "HttpSerializationOptionsInput" -> HTTP_SERIALIZATION_DEFAULT
         "WebSocketSerializationOptionsInput" -> WEBSOCKET_SERIALIZATION_DEFAULT
         "HttpRequestResponseFilterInput" -> REQUEST_RESPONSE_FILTER_DEFAULT
+        "ProxyHttpHistoryFilterInput" -> PROXY_HTTP_HISTORY_FILTER_DEFAULT
         "WebSocketHistoryFilterInput" -> WEBSOCKET_FILTER_DEFAULT
 
         else -> null
@@ -318,7 +328,7 @@ private fun knownPropertyDefault(
                 "limit" -> JsonPrimitive(20)
                 "start_id" -> JsonPrimitive(0)
                 "id_direction" -> JsonPrimitive("increasing")
-                "filter" -> REQUEST_RESPONSE_FILTER_DEFAULT
+                "filter" -> PROXY_HTTP_HISTORY_FILTER_DEFAULT
                 "serialization" -> HTTP_SERIALIZATION_DEFAULT
                 else -> null
             }

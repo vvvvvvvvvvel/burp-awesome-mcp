@@ -23,6 +23,7 @@
   - `mime_types` (string[]|null): response MIME allow-list.
   - `inferred_mime_types` (string[]|null): strict allow-list for `response.inferred_mime_type`.
   - `status_codes` (int[]|null): response status allow-list.
+  - `listener_ports` (int[]|null): allow-list of Burp Proxy listener ports.
   - `has_response` (bool|null): require response presence/absence.
   - `time_from` (string|null): ISO-8601 lower bound (inclusive).
   - `time_to` (string|null): ISO-8601 upper bound (inclusive).
@@ -48,6 +49,7 @@ Example `filter` + `serialization`:
     "mime_types": ["JSON"],
     "inferred_mime_types": ["JSON"],
     "status_codes": [200, 401, 403],
+    "listener_ports": [8080, 8081],
     "host_regex": "example|portswigger",
     "has_response": true,
     "time_from": "2026-03-01T00:00:00Z",

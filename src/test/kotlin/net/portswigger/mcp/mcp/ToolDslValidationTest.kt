@@ -115,7 +115,7 @@ class ToolDslValidationTest {
         val raw =
             Json
                 .parseToJsonElement(
-                    """{"filter":{"methods":"POST","in_scope_only":"true"}}""",
+                    """{"filter":{"methods":"POST","listener_ports":"8081","in_scope_only":"true"}}""",
                 ).let { it as JsonObject }
 
         val parsed =
@@ -125,7 +125,40 @@ class ToolDslValidationTest {
             )
 
         assertEquals(listOf("POST"), parsed.filter.methods)
+        assertEquals(listOf(8081), parsed.filter.listenerPorts)
         assertEquals(true, parsed.filter.inScopeOnly)
+    }
+
+    @Test
+    fun `query history should normalize csv listener ports and boolean aliases`() {
+        val raw =
+            Json
+                .parseToJsonElement(
+                    """{"filter":{"listener_ports":"8081, 8082,8084","has_response":"yes","in_scope_only":"off"}}""",
+                ).let { it as JsonObject }
+
+        val parsed =
+            toolJson.decodeFromJsonElement(
+                QueryProxyHttpHistoryInput.serializer(),
+                raw.normalizeAgentInput(),
+            )
+
+        assertEquals(listOf(8081, 8082, 8084), parsed.filter.listenerPorts)
+        assertEquals(true, parsed.filter.hasResponse)
+        assertEquals(false, parsed.filter.inScopeOnly)
+    }
+
+    @Test
+    fun `csv splitting should not affect keys or urls`() {
+        val raw =
+            Json
+                .parseToJsonElement(
+                    """{"keys":"GET https://example.com/a,b","urls":"https://example.com/a,b"}""",
+                ).let { it as JsonObject }
+
+        val normalized = raw.normalizeAgentInput()
+        assertEquals("[\"GET https://example.com/a,b\"]", normalized["keys"].toString())
+        assertEquals("[\"https://example.com/a,b\"]", normalized["urls"].toString())
     }
 
     @Test

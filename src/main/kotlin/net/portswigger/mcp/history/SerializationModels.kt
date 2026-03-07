@@ -95,6 +95,7 @@ data class SerializedHttpResponse(
 data class SerializedHttpHistoryEntry(
     val id: Int,
     val time: String,
+    val listenerPort: Int? = null,
     val edited: Boolean,
     val notes: String? = null,
     val request: SerializedHttpRequest,
@@ -234,11 +235,40 @@ data class HttpRequestResponseFilterInput(
 )
 
 @Serializable
+data class ProxyHttpHistoryFilterInput(
+    val inScopeOnly: Boolean = true,
+    val regex: String? = null,
+    val methods: List<String>? = null,
+    val hostRegex: String? = null,
+    val mimeTypes: List<String>? = null,
+    val inferredMimeTypes: List<String>? = null,
+    val statusCodes: List<Int>? = null,
+    val hasResponse: Boolean? = null,
+    val timeFrom: String? = null,
+    val timeTo: String? = null,
+    val listenerPorts: List<Int>? = null,
+)
+
+internal fun ProxyHttpHistoryFilterInput.toRequestResponseFilterInput(): HttpRequestResponseFilterInput =
+    HttpRequestResponseFilterInput(
+        inScopeOnly = inScopeOnly,
+        regex = regex,
+        methods = methods,
+        hostRegex = hostRegex,
+        mimeTypes = mimeTypes,
+        inferredMimeTypes = inferredMimeTypes,
+        statusCodes = statusCodes,
+        hasResponse = hasResponse,
+        timeFrom = timeFrom,
+        timeTo = timeTo,
+    )
+
+@Serializable
 data class QueryProxyHttpHistoryInput(
     val startId: Int = 0,
     val idDirection: IdDirection = IdDirection.INCREASING,
     val limit: Int = 20,
-    val filter: HttpRequestResponseFilterInput = HttpRequestResponseFilterInput(),
+    val filter: ProxyHttpHistoryFilterInput = ProxyHttpHistoryFilterInput(),
     val serialization: HttpSerializationOptionsInput = HttpSerializationOptionsInput(),
 )
 

@@ -194,6 +194,7 @@ class ManualCasesLiveIntegrationTest {
                                     "methods" to listOf("POST"),
                                     "status_codes" to listOf(200, 401, 403),
                                     "host_regex" to "127\\.0\\.0\\.1",
+                                    "listener_ports" to listOf(proxyListenerPort),
                                     "has_response" to true,
                                 ),
                             "serialization" to
@@ -218,6 +219,8 @@ class ManualCasesLiveIntegrationTest {
                     assertEquals("POST", method)
                     val statusCode = response["status_code"]?.jsonPrimitive?.intOrNull
                     assertTrue(statusCode in setOf(200, 401, 403))
+                    val listenerPort = entry.jsonObject["listener_port"]?.jsonPrimitive?.intOrNull
+                    assertEquals(proxyListenerPort, listenerPort)
                 }
             }
 

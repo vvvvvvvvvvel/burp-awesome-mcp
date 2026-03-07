@@ -137,6 +137,21 @@ private val SCALAR_TO_ARRAY_FIELDS =
         "urls",
     )
 
+private val CSV_STRING_TO_ARRAY_FIELDS =
+    setOf(
+        "methods",
+        "mime_types",
+        "inferred_mime_types",
+        "status_codes",
+        "direction",
+        "web_socket_ids",
+        "listener_ports",
+        "severity",
+        "confidence",
+        "status",
+        "ids",
+    )
+
 private val STRING_BOOLEAN_FIELDS =
     setOf(
         "in_scope_only",
@@ -177,7 +192,7 @@ private fun normalizeJsonElement(element: JsonElement): JsonElement =
                             normalizedValue !is JsonArray &&
                             normalizedValue !is JsonNull
                         ) {
-                            JsonArray(listOf(normalizedValue))
+                            coerceScalarToArray(key, normalizedValue)
                         } else {
                             normalizedValue
                         }
@@ -190,6 +205,23 @@ private fun normalizeJsonElement(element: JsonElement): JsonElement =
         else -> element
     }
 
+private fun coerceScalarToArray(
+    key: String,
+    value: JsonElement,
+): JsonArray {
+    val scalarContent = (value as? JsonPrimitive)?.contentOrNull
+    if (key !in CSV_STRING_TO_ARRAY_FIELDS || scalarContent == null || ',' !in scalarContent) {
+        return JsonArray(listOf(value))
+    }
+    val items =
+        scalarContent
+            .split(',')
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .map(::JsonPrimitive)
+    return JsonArray(items.ifEmpty { listOf(value) })
+}
+
 private fun coerceBooleanString(
     key: String,
     value: JsonElement,
@@ -199,8 +231,8 @@ private fun coerceBooleanString(
     if (value.booleanOrNull != null) return value
     val lower = value.contentOrNull?.lowercase() ?: return value
     return when (lower) {
-        "true" -> JsonPrimitive(true)
-        "false" -> JsonPrimitive(false)
+        "true", "yes", "1", "on" -> JsonPrimitive(true)
+        "false", "no", "0", "off" -> JsonPrimitive(false)
         else -> value
     }
 }

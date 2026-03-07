@@ -87,8 +87,10 @@ jobs:
 
           cp "build/libs/burp-awesome-mcp.jar" "$RELEASE_DIR/$JAR_NAME"
           cp "skills/SKILL.md" "$RELEASE_DIR/SKILL.md"
+          cp "AGENTS.md" "$RELEASE_DIR/AGENTS.md"
           echo "jar_path=$RELEASE_DIR/$JAR_NAME" >> "$GITHUB_OUTPUT"
           echo "skill_path=$RELEASE_DIR/SKILL.md" >> "$GITHUB_OUTPUT"
+          echo "agents_path=$RELEASE_DIR/AGENTS.md" >> "$GITHUB_OUTPUT"
 
       - name: Sign release assets
         env:
@@ -110,6 +112,10 @@ jobs:
             -in "${{ steps.assets.outputs.skill_path }}" \
             -out "${{ steps.assets.outputs.skill_path }}.sig"
 
+          openssl pkeyutl -sign -inkey "$KEY_FILE" -rawin \
+            -in "${{ steps.assets.outputs.agents_path }}" \
+            -out "${{ steps.assets.outputs.agents_path }}.sig"
+
           rm -f "$KEY_FILE"
 
       - name: Upload release artifacts
@@ -126,7 +132,7 @@ jobs:
           tag: ${{ steps.meta.outputs.tag }}
           commit: ${{ steps.meta.outputs.tag_commit }}
           body: Awesome MCP release ${{ steps.meta.outputs.version }}
-          artifacts: ${{ steps.assets.outputs.jar_path }},${{ steps.assets.outputs.skill_path }},${{ steps.assets.outputs.jar_path }}.sig,${{ steps.assets.outputs.skill_path }}.sig
+          artifacts: ${{ steps.assets.outputs.jar_path }},${{ steps.assets.outputs.skill_path }},${{ steps.assets.outputs.agents_path }},${{ steps.assets.outputs.jar_path }}.sig,${{ steps.assets.outputs.skill_path }}.sig,${{ steps.assets.outputs.agents_path }}.sig
           allowUpdates: true
           replacesArtifacts: true
           artifactErrorsFailBuild: true

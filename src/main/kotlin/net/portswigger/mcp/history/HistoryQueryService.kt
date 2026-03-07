@@ -13,7 +13,7 @@ class HistoryQueryService(
     fun queryHttpHistory(input: QueryProxyHttpHistoryInput): QueryHttpHistoryResult {
         val normalizedLimit = input.limit.coerceIn(1, 500)
         val options = input.toHttpSerializationOptions()
-        val filter = compileRequestResponseFilter(input.filter)
+        val filter = compileProxyHttpHistoryFilter(input.filter)
         val regexPattern = compileOptionalPattern(input.filter.regex, "filter.regex")
 
         val history = fetchHttpHistory(regex = null)
@@ -26,7 +26,7 @@ class HistoryQueryService(
                 idDirection = input.idDirection,
             ) { item ->
                 if (regexPattern != null && !item.contains(regexPattern)) return@collectFilteredPage false
-                (!filter.inScopeOnly || isHttpHistoryItemInScope(item)) &&
+                (!filter.requestResponse.inScopeOnly || isHttpHistoryItemInScope(item)) &&
                     matchesHttpHistoryFilter(item, filter)
             }
 
@@ -370,14 +370,16 @@ class HistoryQueryService(
 
     private fun matchesHttpHistoryFilter(
         item: ProxyHttpRequestResponse,
-        filter: CompiledRequestResponseFilter,
+        filter: CompiledProxyHttpHistoryFilter,
     ): Boolean {
+        if (filter.listenerPorts != null && item.listenerPort() !in filter.listenerPorts) return false
+
         val request = runCatching { item.finalRequest() }.getOrElse { item.request() }
         val host = runCatching { request.httpService().host() }.getOrDefault("")
 
         val hasResponse = runCatching { item.hasResponse() }.getOrDefault(false)
         return matchesRequestResponseFilter(
-            filter = filter,
+            filter = filter.requestResponse,
             request = request,
             requestHost = host,
             hasResponse = hasResponse,

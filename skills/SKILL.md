@@ -1,6 +1,10 @@
 ---
 name: Awesome MCP Burp Operations
-description: Use this skill when the user asks to operate Burp Suite through Awesome MCP, including traffic querying, scope control, active HTTP testing, Repeater/Intruder/Organizer workflows, scanner orchestration, collaborator checks, and cookie jar operations.
+description: >-
+  Use this skill when operating Burp Suite through Awesome MCP for pentest
+  workflows: traffic discovery, exact retrieval by IDs/keys, scope control,
+  active HTTP execution, Repeater/Intruder/Organizer actions,
+  scanner/collaborator flows, and cookie jar operations.
 metadata:
   author: vvvvvvvvvvel
   version: "1.0.1"
@@ -8,180 +12,147 @@ metadata:
 
 # Awesome MCP Burp Operations
 
-## Purpose
-Operate Burp Suite through Awesome MCP with agent-friendly, low-noise workflows that are safe for large projects and effective for pentest/bug bounty tasks.
+## Use this skill when
+- The user wants Burp actions through MCP, not manual Burp UI clicking.
+- The task needs stable cursoring over Burp data (`list_*` then `get_*_by_*`).
+- The task is pentest/bug bounty oriented and context size matters.
 
-## Inputs / Prerequisites
-- Burp Suite with Awesome MCP extension loaded and running.
-- MCP endpoint available (default: `http://127.0.0.1:26001/mcp`).
-- Transport: `streamable_http` preferred.
-- Traffic exists in Burp (Proxy history / Site Map) when using read/query tools.
+## Prerequisites
+- Burp has Awesome MCP extension enabled.
+- Endpoint is reachable (default streamable HTTP): `http://127.0.0.1:26001/mcp`.
+- Burp has traffic if history/site map tools are used.
 
-## Tool Families
+## Core operating rules
+1. Keep scope as source of truth.
+   - Use in-scope queries first (`filter.in_scope_only=true` defaults on list tools).
+   - Any scope mutation (`scope_add_*`, `scope_remove_*`) requires explicit user approval.
+2. Keep payloads small first, expand only when needed.
+   - Discovery calls: minimal serialization.
+   - Deep evidence: exact IDs/keys + expanded serialization.
+3. Use list -> narrow -> exact-fetch flow.
+   - First `list_*` with filters.
+   - Then `get_*_by_ids` / `get_*_by_keys` on selected items.
+4. Pagination stop signal is `next == null`.
+   - `total` is full source size before filter matching.
+5. For fresh session/auth artifacts, traverse from tail.
+   - Use `id_direction=decreasing`.
 
-### History and retrieval
+## High-value tool map
+
+### Discovery and retrieval
 - `list_proxy_http_history`
 - `get_proxy_http_history_by_ids`
 - `list_proxy_websocket_history`
 - `get_proxy_websocket_messages_by_ids`
 - `list_site_map`
 - `get_site_map_by_keys`
+- `list_organizer_items`
+- `get_organizer_items_by_ids`
+
+### Summaries and utilities
 - `summarize_http_history_cookies`
 - `summarize_http_history_auth_headers`
+- `url_encode`, `url_decode`
+- `base64_encode`, `base64_decode`
+- `generate_random_string`
 
-### Active HTTP and workflow
+### Active testing and workflow actions
 - `send_http1_requests`
 - `send_http2_requests`
 - `create_repeater_tabs`
 - `send_requests_to_intruder`
 - `send_requests_to_intruder_template`
 - `send_requests_to_organizer`
-- `list_organizer_items`
-- `get_organizer_items_by_ids`
 
-### Scope and utility
-- `scope_add_include`
-- `scope_add_exclude`
-- `scope_remove_include`
-- `scope_remove_exclude`
+### Scope and environment control
+- `scope_add_include`, `scope_add_exclude`
+- `scope_remove_include`, `scope_remove_exclude`
 - `scope_is_url_in_scope`
-- `url_encode`
-- `url_decode`
-- `base64_encode`
-- `base64_decode`
-- `generate_random_string`
-
-### Config/runtime
-- `get_project_options_json`
-- `get_user_options_json`
+- `set_proxy_intercept_enabled`, `get_proxy_intercept_enabled`
+- `set_task_engine_state`, `get_task_engine_state`
+- `get_project_options_json`, `set_project_options_json`
+- `get_user_options_json`, `set_user_options_json`
 - `list_proxy_request_listeners`
 - `get_project_scope_rules`
-- `set_project_options_json`
-- `set_user_options_json`
-- `set_task_engine_state`
-- `get_task_engine_state`
-- `set_proxy_intercept_enabled`
-- `get_proxy_intercept_enabled`
-- `get_active_text_editor_contents`
-- `set_active_text_editor_contents`
 
-### Scanner/Collaborator/Cookies
-- `start_scanner_crawl`
-- `start_scanner_audit`
-- `get_scanner_task_status`
-- `list_scanner_tasks`
-- `cancel_scanner_task`
-- `generate_scanner_report`
-- `list_scanner_issues`
-- `generate_collaborator_payload`
-- `list_collaborator_interactions`
-- `list_cookie_jar`
-- `set_cookie_jar_cookie`
-- `expire_cookie_jar_cookie`
+### Cookies, scanner, collaborator
+- `list_cookie_jar`, `set_cookie_jar_cookie`, `expire_cookie_jar_cookie`
+- `start_scanner_crawl`, `start_scanner_audit`
+- `get_scanner_task_status`, `list_scanner_tasks`, `cancel_scanner_task`
+- `list_scanner_issues`, `generate_scanner_report`
+- `generate_collaborator_payload`, `list_collaborator_interactions`
 
-## Core Operating Rules
+## Cursor and pagination model
 
-1. Keep Burp scope as the source of truth.
-   - Use `filter.in_scope_only=true` by default (history/site map defaults).
-   - Any scope modification should be user-approved before calling `scope_add_*` / `scope_remove_*`.
-   - Use `in_scope_only=false` only when explicitly requested or when a scoped approach is intentionally not possible.
-2. Keep context small by default.
-   - Start with minimal serialization for discovery.
-   - Expand bodies/raw only when needed.
-3. Use cursor flow, not random jumps.
-   - Always follow `next` returned by list tools.
-   - `next=null` means end of data for current filter.
-4. Use exact-fetch tools after discovery.
-   - Query with filters first, then pull details by ID/key only for interesting entries.
-5. Prefer tail-first for “fresh” artifacts.
-   - Session tokens, auth headers, and recent failures are usually near the end.
-
-## Cursor Strategy (Critical)
-
-### HTTP and WebSocket list tools
+### HTTP/WebSocket/Organizer list tools
 - Cursor fields:
-  - `start_id` (inclusive)
+  - `start_id` (inclusive anchor)
   - `id_direction`: `increasing` or `decreasing`
-- Default:
+- Defaults:
   - `start_id=0`
   - `id_direction=increasing`
+- `start_id < 0` is Python-like index from tail (`-1` last item).
+- Always continue with returned `next` object as-is.
+- `next == null` is the only reliable stop condition for current query state.
+- `total` is source size before filter matching (not matched-count).
+- Prefer page size in the `20..100` range for stable agent loops.
 
-### Practical patterns
-1. Full historical sweep (for broad recon):
-   - `start_id=0`, `id_direction=increasing`, moderate `limit`.
-2. Latest-first triage (for current session behavior):
-   - `start_id=0`, `id_direction=decreasing`.
-3. Session/token hunting:
-   - start from tail (`decreasing`) with strict host/method/regex filters.
-4. Continue pagination:
-   - re-use response `next` object directly.
-   - do not hand-craft the next cursor unless required.
+### Site Map list tool
+- Cursor field: `start_after_key` (exclusive).
+- For restart-safe continuation, pass the previous response `next`.
+- If `start_after_key not found`, restart with `start_after_key=null` and de-duplicate by `results[].key`.
 
-### Pagination semantics
-- `total` is the source list size before filter matching.
-- `next` is the authoritative continuation signal for the current filter/cursor state.
-- `next=null` means there are no more matched entries for that query state.
-- Do not interpret `total` as matched count.
-- For HTTP/WebSocket list tools, `start_id` matches Burp item IDs shown in Burp UI/history views.
-- `start_id` is inclusive.
-- Negative `start_id` is index-style (Python-like): `-1` means the last entry, `-2` means the previous one.
+### Scanner/Cookie list tools
+- Offset model (`offset`, `limit`, `has_more`) instead of cursor `next`.
+- `list_cookie_jar.order` accepts only `asc` or `desc`.
 
-### Limits and clamping
-- For list-style history queries, server-side `limit` is clamped to `1..500`.
-- Use moderate page sizes (`20..100`) and continue with `next` for stable agent loops.
+## Filter model
 
-## Filter Strategy
-
-### HTTP filter fields
-- `in_scope_only: boolean`
-- `regex: string`
-- `methods: string[]`
-- `host_regex: string`
-- `mime_types: string[]`
-- `inferred_mime_types: string[]`
-- `status_codes: int[]`
-- `has_response: boolean`
-- `time_from: ISO-8601`
-- `time_to: ISO-8601`
-
-### WebSocket filter fields
-- `in_scope_only: boolean`
-- `regex: string`
-- `direction: ["client_to_server" | "server_to_client"]`
-- `web_socket_ids: int[]`
-- `host_regex: string`
-- `listener_ports: int[]`
-- `has_edited_payload: boolean`
+### HTTP history filter fields
+- `in_scope_only`
+- `regex`
+- `methods[]`
+- `host_regex`
+- `mime_types[]`
+- `inferred_mime_types[]`
+- `status_codes[]`
+- `listener_ports[]`
+- `has_response`
 - `time_from`, `time_to`
 
-### Filter tips
-- Regex escaping depends on how input is sent:
-  - If you send raw JSON text, use `\\.` in JSON so runtime receives `\.`.
-  - If client UI already unescapes for you, enter `\.` directly.
-  - Do not double-escape into runtime `\\.` unless you want a literal backslash.
-- `methods` must be an array (`["POST"]`), not a scalar.
-- Booleans must be JSON booleans (`true`/`false`), not strings (`"true"`/`"false"`).
-- Use `has_response=true` to avoid half-open history entries when response-dependent analysis is needed.
+### SiteMap/Organizer filter fields
+- `in_scope_only`
+- `regex`
+- `methods[]`
+- `host_regex`
+- `mime_types[]`
+- `inferred_mime_types[]`
+- `status_codes[]`
+- `has_response`
+- `time_from`, `time_to`
 
-## Serialization Strategy
+### WebSocket filter fields
+- `in_scope_only`
+- `regex`
+- `direction` (`client_to_server` | `server_to_client`)
+- `web_socket_ids[]`
+- `host_regex`
+- `listener_ports[]`
+- `has_edited_payload`
+- `time_from`, `time_to`
 
-### Why it matters
-Serialization options control output volume, not filtering semantics.
+### Filter correctness notes
+- Array fields are schema-defined arrays (`methods: ["POST"]`).
+- Some agent clients are normalized from scalar -> array at runtime, but do not rely on that behavior when constructing calls deliberately.
+- Booleans must be booleans (`true/false`, not strings).
+- Use `has_response=true` when response-dependent analysis is needed.
+- Regex escaping depends on client layer; avoid double-escaping at runtime.
 
-### HTTP defaults
-- `include_headers=true`
-- `include_request_body=true`
-- `include_response_body=true`
-- `include_raw_request=false`
-- `include_raw_response=false`
-- `include_binary=false`
-- `max_text_body_chars=1024`
-- `max_binary_body_bytes=65536`
-- `text_overflow_mode="omit"`
+## Serialization strategy
+
+Serialization options shape output size; they do not filter dataset membership.
 
 ### Minimal discovery profile
-Use this for first-pass querying:
-
 ```json
 {
   "include_headers": false,
@@ -193,8 +164,6 @@ Use this for first-pass querying:
 ```
 
 ### Standard inspection profile
-Use this for most practical pentest analysis after discovery:
-
 ```json
 {
   "include_headers": true,
@@ -208,9 +177,7 @@ Use this for most practical pentest analysis after discovery:
 }
 ```
 
-### Deep forensics profile
-Use only for narrowed IDs/keys when binary/raw evidence is explicitly needed:
-
+### Deep evidence profile
 ```json
 {
   "include_headers": true,
@@ -225,94 +192,57 @@ Use only for narrowed IDs/keys when binary/raw evidence is explicitly needed:
 }
 ```
 
-## High-Value Workflows
+## Operational workflows
 
-### 1) Find recent auth/session artifacts
-1. Call `list_proxy_http_history` with:
-   - `id_direction=decreasing`
-   - start without a method filter (or include `GET` when narrowing is needed)
-   - `filter.host_regex` set to target
-   - lightweight serialization
-   - apply strict method filters only after first candidate artifacts are identified
-2. Call `summarize_http_history_auth_headers` and `summarize_http_history_cookies`.
-3. Pull exact entries with `get_proxy_http_history_by_ids` for top candidates.
+### A) Recent auth/session hunting
+1. `list_proxy_http_history` with `id_direction=decreasing`, strict `host_regex`, minimal serialization.
+2. `summarize_http_history_auth_headers` + `summarize_http_history_cookies`.
+3. `get_proxy_http_history_by_ids` on candidate IDs with standard/deep profile.
 
-### 2) Build test requests from observed traffic
-1. Discover interesting entries via `list_proxy_http_history`.
-2. Fetch full raw requests by ID.
-3. Push to `create_repeater_tabs` for manual exploitation.
-4. Push selected requests to `send_requests_to_intruder(_template)` for automation.
+### B) Replay from observed traffic
+1. Discover via `list_proxy_http_history`.
+2. Pull exact requests by ID.
+3. Send to `create_repeater_tabs` or `send_requests_to_intruder*`.
 
-### 3) Scope-aware recon loop
-1. Validate/adjust scope: `scope_add_include`, `scope_add_exclude`, `scope_is_url_in_scope`.
-2. Run `list_site_map` for target structure and known endpoints.
-3. Use `list_proxy_http_history` for live behavior and parameter-rich requests.
+### C) Scope-aware recon
+1. Validate scope with `scope_is_url_in_scope`.
+2. If user approved, adjust scope via `scope_add_*`/`scope_remove_*`.
+3. Use `list_site_map` for surface, `list_proxy_http_history` for concrete events.
 
-### 4) Scanner orchestration (Pro)
-1. Start with `start_scanner_crawl` or `start_scanner_audit`.
-2. Track with `list_scanner_tasks` and `get_scanner_task_status`.
+### D) Scanner triage (Pro)
+1. Start tasks (`start_scanner_crawl` / `start_scanner_audit`).
+2. Track via `list_scanner_tasks` and `get_scanner_task_status`.
 3. Triage with `list_scanner_issues`.
-4. Export with `generate_scanner_report`.
+4. Export via `generate_scanner_report`.
 
-## Tool-Specific Notes
+### E) Multi-client traffic separation for auth/IDOR/BAC testing
+1. If the user can help with setup, ask them to run different browsers/devices/roles through different Burp Proxy listeners.
+2. Keep the separation simple:
+   - browser A / low-privilege user -> listener port A
+   - browser B / admin or second user -> listener port B
+3. Choose the query mode based on what you need:
+   - use `filter.listener_ports` when only one listener flow is needed server-side
+   - omit that filter when you want one mixed window and will compare flows yourself
+4. Split or compare mixed result sets client-side using `results[].listener_port`.
+5. Use this when hunting IDOR, broken access control, session confusion, role drift, or cross-account state mixups.
 
-### `list_site_map` vs `list_proxy_http_history`
-- `list_site_map`: deduplicated/structured application surface.
-- `list_proxy_http_history`: chronological concrete traffic events.
-- Use both: site map for coverage, history for exact replay/exploitation.
+## Important tool semantics
+- `list_site_map` gives structured/deduplicated surface; `list_proxy_http_history` gives chronological concrete traffic.
+- HTTP history entries include `listener_port`, so different Burp Proxy listeners can be used as a practical separation signal between browsers, roles, or devices.
+- `filter.listener_ports` exists for `list_proxy_http_history` and `list_proxy_websocket_history`; it is not part of Site Map / Organizer filters.
+- `send_http1_requests` and `send_http2_requests` are direct sends; they do not automatically appear in Proxy history.
+- If later discovery via `list_proxy_http_history` / `list_site_map` is required, route traffic through a Burp Proxy listener first.
+- `send_http2_requests` should use HTTP/2 mode options and `headers_list` when duplicate header names must be preserved.
+- `get_site_map_by_keys` accepts only keys from `list_site_map.results[].key`.
+- `list_scanner_tasks` is runtime-local to Awesome MCP tracking; it is not a global historical scanner inventory.
+- `list_scanner_issues` defaults are body-light (`include_request_body=false`, `include_response_body=false`); enable request/response detail only for narrowed issue sets.
+- `list_scanner_issues` uses offset pagination; while scans are changing, page boundaries can shift.
+- `expire_cookie_jar_cookie` is expire semantics (practical delete), not hard delete.
+- `list_cookie_jar` is not cursor-based; use `offset` / `limit`, and keep `order` to `asc` or `desc` exactly.
 
-### `get_site_map_by_keys`
-- Keys must come from `list_site_map.results[].key`.
-- This is exact lookup, not search.
+## Recommended call patterns
 
-### Site Map cursor recovery
-- `start_after_key` is exclusive and must refer to an existing key.
-- If you get `start_after_key not found`, restart with `start_after_key=null` using the same filter.
-- De-duplicate client-side by `results[].key` while resuming.
-
-### `send_http1_requests`
-- Best for raw HTTP/1.1 request replay and parser-edge testing.
-- Use when you want explicit wire-like request text control.
-- Requests sent by this tool do not appear in Proxy HTTP history.
-
-### `send_http2_requests`
-- `request_options.http_mode` must be `http_2` / `http_2_ignore_alpn` or omitted.
-- Use `headers_list` when duplicate header names must be preserved.
-- Requests sent by this tool do not appear in Proxy HTTP history.
-
-### Choosing `send_http1_requests` vs `send_http2_requests`
-- Use HTTP/1.1 tool for classic replay/smuggling-oriented request crafting.
-- Use HTTP/2 tool for true H2 behavior and pseudo-header aware testing.
-- Keep both tools; they are protocol-specific and not interchangeable in real cases.
-- Agent decision rule:
-  - If you only need immediate request/response output, use `send_http*_requests`.
-  - If you need this traffic to be discoverable later via `list_proxy_http_history`/`list_site_map`, you must route the request through a Burp Proxy listener first, and only then query history.
-
-### `list_scanner_issues` serialization note
-- Default scanner issue output is body-light:
-  - `include_request_body=false`
-  - `include_response_body=false`
-- For deep issue evidence, enable `include_request_response=true` and pass explicit serialization options.
-
-### `list_scanner_issues` pagination caveat
-- This tool uses `offset` pagination.
-- While scans are running and issues are changing, offset pages can shift.
-- For deterministic triage, prefer running it on a stable issue set (or re-query from offset `0` after scan state changes).
-
-### `list_scanner_tasks` limitation
-- Returns only tasks created and tracked by the current Awesome MCP runtime.
-- After Burp/extension restart, this view is not a complete historical inventory of Burp scanner tasks.
-
-### `generate_collaborator_payload` / `list_collaborator_interactions`
-- Generate payload first, then trigger it externally, then poll interactions.
-- Keep `payload_id` and `secret_key` from generation result.
-
-### Cookie deletion semantics
-- `expire_cookie_jar_cookie` expires matching cookies (practical delete behavior in Burp context).
-
-## Recommended Call Patterns
-
-### Pattern A: Most recent 20 in-scope entries
+### Pattern 1: last 20 in-scope with responses
 ```json
 {
   "start_id": 0,
@@ -330,10 +260,10 @@ Use only for narrowed IDs/keys when binary/raw evidence is explicitly needed:
 }
 ```
 
-### Pattern B: Continue page
-Use response `next` as-is.
+### Pattern 2: continue page
+- Reuse response `next` directly.
 
-### Pattern C: Pull exact entries deeply
+### Pattern 3: deep pull by IDs
 ```json
 {
   "ids": [123, 140, 155],
@@ -347,14 +277,14 @@ Use response `next` as-is.
 }
 ```
 
-## Anti-Patterns
-- Do not fetch large bodies/raw for broad list queries.
-- Do not use `get_*_by_ids` before discovery phase.
-- Do not rely only on regex when structured filters can reduce noise faster.
-- Do not edit full project/user options without round-tripping current JSON first.
+## Anti-patterns
+- Pulling full raw/binary bodies on broad list queries.
+- Skipping discovery and calling `get_*_by_*` blindly.
+- Using regex-only filtering when structured fields are available.
+- Editing project/user options without round-tripping current JSON first.
 
 ## Troubleshooting
-- Error `Expected JsonArray`: send arrays for list fields (`methods`, `severity`, etc.).
-- Empty results with strict filters: disable one filter dimension at a time.
-- Regex mismatch: verify escaping in JSON strings.
-- Missing scanner/collaborator behavior: ensure Burp edition/features and runtime conditions are valid.
+- `Expected JsonArray`: send arrays for array fields (`methods`, `severity`, `confidence`, etc.).
+- Empty result set: relax one filter dimension at a time.
+- Regex mismatch: check escaping at the client layer.
+- Scanner/collaborator issues: verify Burp edition and runtime conditions.
