@@ -10,17 +10,15 @@
 ## Input field reference
 
 ### Shared HTTP serialization object
-- `include_headers` (bool, default `true`)
-- `include_request_body` (bool, default `true`)
-- `include_response_body` (bool, default `true`)
-- `include_raw_request` (bool, default `false`)
-- `include_raw_response` (bool, default `false`)
 - `include_binary` (bool, default `false`)
 - `max_text_body_chars` (int, default `1024`)
 - `max_request_body_chars` (int|null)
 - `max_response_body_chars` (int|null)
 - `text_overflow_mode` (`truncate|omit`, default `omit`)
 - `max_binary_body_bytes` (int, default `65536`)
+- `regex_excerpt` (object|null):
+  - `context_chars` (int, default `10`)
+  - `regex` (string): required when excerpt mode is needed in `send_http1_requests` / `send_http2_requests`
 
 ### Shared `request_options` object (`send_http1_requests`, `send_http2_requests`)
 - `http_mode` (string|null): transport mode (`http_1`, `http_2`, `http_2_ignore_alpn` depending on tool).
@@ -49,6 +47,7 @@ Request options example:
   - `uses_https` (bool)
 - `request_options` (object|null): shared object above.
 - `serialization` (object): shared HTTP serialization above.
+- `fields` / `exclude_fields` (string[]|null): optional projection relative to each successful `results[].result` object.
 - `parallel` (bool, default `false`): process list in parallel.
 - `parallel_rps` (int, default `10`): throughput cap for parallel mode.
 
@@ -63,8 +62,18 @@ Request options example:
   - `uses_https` (bool)
 - `request_options` (object|null): shared object above (for this tool, `http_mode` should be `http_2` or `http_2_ignore_alpn`).
 - `serialization` (object): shared HTTP serialization above.
+- `fields` / `exclude_fields` (string[]|null): optional projection relative to each successful `results[].result` object.
 - `parallel` (bool, default `false`)
 - `parallel_rps` (int, default `10`)
+
+Projection notes for `send_http1_requests` / `send_http2_requests`:
+- use `fields` to keep only needed result branches such as `status_code`, `has_response`, `response.status_code`, `response.body`
+- use `exclude_fields` when you want the optimized default non-raw result minus a few branches
+- `request.raw` / `response.raw` are materialized only when explicitly requested in `fields`
+- filtering is not involved here; projection only changes returned result shape
+- when `serialization.regex_excerpt` is enabled, `match_context` becomes available as a normal optional projection branch
+- when `serialization.regex_excerpt` is enabled, `request.body`, `response.body`, `request.raw`, and `response.raw` must not be requested in `fields`
+- the optimized default HTTP result omits `request.path`, `request.query`, `request.in_scope`, empty `response.cookies`, and duplicate stated/inferred MIME fields when they equal `response.mime_type`
 
 ### `create_repeater_tabs` / `send_requests_to_intruder`
 - `items` (array):
@@ -99,9 +108,8 @@ Request options example:
     }
   ],
   "parallel": false,
+  "fields": ["status_code", "has_response", "response.status_code", "response.body"],
   "serialization": {
-    "include_headers": true,
-    "include_response_body": true,
     "text_overflow_mode": "omit"
   }
 }

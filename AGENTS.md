@@ -22,7 +22,7 @@
 
 - Preserve `snake_case` tool names and wire keys.
 - Preserve stable response envelopes for list/get tools and do not change them casually.
-- If schema shape, defaults, pagination, serialization, or endpoint semantics change, update tests, `README.md`, `skills/SKILL.md`, and relevant `tests-cases/*.md` in the same task.
+- If schema shape, defaults, pagination, serialization, or endpoint semantics change, update tests, `README.md`, `SKILL.md`, and relevant `tests-cases/*.md` in the same task.
 
 ## Settings UX Invariants
 
@@ -42,6 +42,24 @@
 - Prefer `list_*` tools for discovery and `get_*_by_ids` / `get_*_by_keys` for exact follow-up.
 - Do not pull heavy request/response bodies during broad discovery unless the task clearly needs them.
 - Serialization options change output size and shape only; they do not affect which records match.
+- `serialization.regex_excerpt` is the compact regex-triage mode for supported HTTP tools.
+- When `serialization.regex_excerpt` is enabled:
+  - `match_context` may be requested or excluded through normal `fields` / `exclude_fields` projection
+  - `request.body`, `response.body`, `request.raw`, and `response.raw` must not be requested in `fields`
+- HTTP list/get tools also support item-level projection:
+  - `fields`: include only listed item paths
+  - `exclude_fields`: remove listed item paths from otherwise optimized default items
+- Projection applies to result items only, not to stable envelopes such as `total`, `next`, `requested`, `found`, or `results`.
+- Only one of `fields` or `exclude_fields` may be non-null; if both are null, the optimized default item shape is returned.
+- For HTTP history, Site Map, Organizer, direct-send results, and scanner request/response snapshots, headers and request/response bodies are materialized automatically from `fields` / `exclude_fields`.
+- `request.raw` and `response.raw` are materialized only when explicitly requested in `fields`.
+- The optimized default HTTP shape omits:
+  - `listener_port`, `edited`
+  - root-level `in_scope`
+  - `request.path`, `request.query`, `request.in_scope`
+  - empty `response.cookies`
+  - `response.stated_mime_type` / `response.inferred_mime_type` when they equal `response.mime_type`
+- Filtering and regex matching happen on source Burp data before projection; a record may match a filter because of a branch that is omitted from final output.
 
 ## Cursor and Pagination Invariants
 

@@ -46,11 +46,18 @@ data class WebSocketSerializationOptions(
 )
 
 fun HttpSerializationOptionsInput.normalized(): HttpSerializationOptions =
-    normalized(
-        includeBinaryOverride = null,
-        maxRequestBodyCharsOverride = null,
-        maxResponseBodyCharsOverride = null,
-        textOverflowModeOverride = null,
+    buildHttpSerializationOptions(
+        includeHeaders = includeHeaders,
+        includeRequestBody = includeRequestBody,
+        includeResponseBody = includeResponseBody,
+        includeRawRequest = includeRawRequest,
+        includeRawResponse = includeRawResponse,
+        includeBinary = includeBinary,
+        maxTextBodyChars = maxTextBodyChars,
+        maxRequestBodyChars = maxRequestBodyChars,
+        maxResponseBodyChars = maxResponseBodyChars,
+        textOverflowMode = textOverflowMode,
+        maxBinaryBodyBytes = maxBinaryBodyBytes,
     )
 
 fun HttpSerializationOptionsInput.normalized(
@@ -58,25 +65,35 @@ fun HttpSerializationOptionsInput.normalized(
     maxRequestBodyCharsOverride: Int? = null,
     maxResponseBodyCharsOverride: Int? = null,
     textOverflowModeOverride: TextOverflowMode? = null,
-): HttpSerializationOptions {
-    val normalizedMaxText = maxTextBodyChars.coerceAtLeast(0)
-    val normalizedRequestMax = (maxRequestBodyCharsOverride ?: maxRequestBodyChars ?: normalizedMaxText).coerceAtLeast(0)
-    val normalizedResponseMax = (maxResponseBodyCharsOverride ?: maxResponseBodyChars ?: normalizedMaxText).coerceAtLeast(0)
-
-    return HttpSerializationOptions(
+): HttpSerializationOptions =
+    buildHttpSerializationOptions(
         includeHeaders = includeHeaders,
         includeRequestBody = includeRequestBody,
         includeResponseBody = includeResponseBody,
         includeRawRequest = includeRawRequest,
         includeRawResponse = includeRawResponse,
         includeBinary = includeBinaryOverride ?: includeBinary,
-        maxRequestBodyChars = normalizedRequestMax,
-        maxResponseBodyChars = normalizedResponseMax,
-        maxRawBodyChars = maxOf(normalizedRequestMax, normalizedResponseMax),
+        maxTextBodyChars = maxTextBodyChars,
+        maxRequestBodyChars = maxRequestBodyCharsOverride ?: maxRequestBodyChars,
+        maxResponseBodyChars = maxResponseBodyCharsOverride ?: maxResponseBodyChars,
         textOverflowMode = textOverflowModeOverride ?: textOverflowMode,
-        maxBinaryBodyBytes = maxBinaryBodyBytes.coerceAtLeast(0),
+        maxBinaryBodyBytes = maxBinaryBodyBytes,
     )
-}
+
+internal fun ProjectedHttpSerializationOptionsInput.normalized(materialization: ProjectedHttpMaterialization): HttpSerializationOptions =
+    buildHttpSerializationOptions(
+        includeHeaders = materialization.includeHeaders,
+        includeRequestBody = materialization.includeRequestBody,
+        includeResponseBody = materialization.includeResponseBody,
+        includeRawRequest = materialization.includeRawRequest,
+        includeRawResponse = materialization.includeRawResponse,
+        includeBinary = includeBinary,
+        maxTextBodyChars = maxTextBodyChars,
+        maxRequestBodyChars = maxRequestBodyChars,
+        maxResponseBodyChars = maxResponseBodyChars,
+        textOverflowMode = textOverflowMode,
+        maxBinaryBodyBytes = maxBinaryBodyBytes,
+    )
 
 fun WebSocketSerializationOptionsInput.normalized(): WebSocketSerializationOptions =
     WebSocketSerializationOptions(
@@ -86,21 +103,46 @@ fun WebSocketSerializationOptionsInput.normalized(): WebSocketSerializationOptio
         maxBinaryPayloadBytes = maxBinaryPayloadBytes.coerceAtLeast(0),
     )
 
-fun QueryProxyHttpHistoryInput.toHttpSerializationOptions(): HttpSerializationOptions = serialization.normalized()
-
-fun GetProxyHttpHistoryItemsInput.toHttpSerializationOptions(): HttpSerializationOptions = serialization.normalized()
-
-fun QuerySiteMapInput.toHttpSerializationOptions(): HttpSerializationOptions = serialization.normalized()
-
-fun GetSiteMapItemsInput.toHttpSerializationOptions(): HttpSerializationOptions = serialization.normalized()
-
 fun QueryProxyWebSocketHistoryInput.toWebSocketSerializationOptions(): WebSocketSerializationOptions = serialization.normalized()
 
 fun GetProxyWebSocketMessagesInput.toWebSocketSerializationOptions(): WebSocketSerializationOptions = serialization.normalized()
 
+private fun buildHttpSerializationOptions(
+    includeHeaders: Boolean,
+    includeRequestBody: Boolean,
+    includeResponseBody: Boolean,
+    includeRawRequest: Boolean,
+    includeRawResponse: Boolean,
+    includeBinary: Boolean,
+    maxTextBodyChars: Int,
+    maxRequestBodyChars: Int?,
+    maxResponseBodyChars: Int?,
+    textOverflowMode: TextOverflowMode,
+    maxBinaryBodyBytes: Int,
+): HttpSerializationOptions {
+    val normalizedMaxText = maxTextBodyChars.coerceAtLeast(0)
+    val normalizedRequestMax = (maxRequestBodyChars ?: normalizedMaxText).coerceAtLeast(0)
+    val normalizedResponseMax = (maxResponseBodyChars ?: normalizedMaxText).coerceAtLeast(0)
+
+    return HttpSerializationOptions(
+        includeHeaders = includeHeaders,
+        includeRequestBody = includeRequestBody,
+        includeResponseBody = includeResponseBody,
+        includeRawRequest = includeRawRequest,
+        includeRawResponse = includeRawResponse,
+        includeBinary = includeBinary,
+        maxRequestBodyChars = normalizedRequestMax,
+        maxResponseBodyChars = normalizedResponseMax,
+        maxRawBodyChars = maxOf(normalizedRequestMax, normalizedResponseMax),
+        textOverflowMode = textOverflowMode,
+        maxBinaryBodyBytes = maxBinaryBodyBytes.coerceAtLeast(0),
+    )
+}
+
 fun mapHttpHistoryItem(
     item: ProxyHttpRequestResponse,
     options: HttpSerializationOptions,
+    matchContext: MatchContext? = null,
 ): SerializedHttpHistoryEntry {
     val request = runCatching { item.finalRequest() }.getOrElse { item.request() }
     val response =
@@ -116,6 +158,7 @@ fun mapHttpHistoryItem(
         notes = runCatching { item.annotations().notes() }.getOrNull()?.takeIf { it.isNotBlank() },
         request = mapRequest(request, options),
         response = response?.let { mapResponse(it, options) },
+        matchContext = matchContext,
     )
 }
 
@@ -176,6 +219,7 @@ fun mapWebSocketHistoryItem(
 fun mapSiteMapItem(
     item: HttpRequestResponse,
     options: HttpSerializationOptions,
+    matchContext: MatchContext? = null,
 ): SerializedSiteMapEntry {
     val request = item.request()
     val response =
@@ -190,6 +234,7 @@ fun mapSiteMapItem(
         notes = runCatching { item.annotations().notes() }.getOrNull()?.takeIf { it.isNotBlank() },
         request = mapRequest(request, options),
         response = response?.let { mapResponse(it, options) },
+        matchContext = matchContext,
     )
 }
 
@@ -267,7 +312,6 @@ private fun mapRequest(
                 options = options,
                 includeBody = options.includeRequestBody,
                 maxTextChars = options.maxRequestBodyChars,
-                omittedReason = "request body excluded by includeRequestBody=false",
             ),
         raw = serializeOptionalRaw(payloadCapture, options.includeRawRequest, options.maxRawBodyChars),
     )
@@ -291,16 +335,9 @@ private fun mapResponse(
             inferredMimeType = null,
             headers = if (options.includeHeaders) emptyMap() else null,
             cookies = if (options.includeHeaders) emptyList() else null,
-            body =
-                syntheticUnavailableBody(
-                    includeBody = options.includeResponseBody,
-                    omittedReason = "body unavailable for synthetic timeout/error response",
-                ),
+            body = syntheticUnavailableBody(includeBody = options.includeResponseBody),
             raw =
-                syntheticUnavailableRaw(
-                    includeRaw = options.includeRawResponse,
-                    omittedReason = "raw response unavailable for synthetic timeout/error response",
-                ),
+                syntheticUnavailableRaw(includeRaw = options.includeRawResponse),
         )
     }
 
@@ -326,7 +363,6 @@ private fun mapResponse(
                 options = options,
                 includeBody = options.includeResponseBody,
                 maxTextChars = options.maxResponseBodyChars,
-                omittedReason = "response body excluded by includeResponseBody=false",
             ),
         raw = serializeOptionalRaw(payloadCapture, options.includeRawResponse, options.maxRawBodyChars),
     )
@@ -391,8 +427,7 @@ private fun serializeOptionalBody(
     options: HttpSerializationOptions,
     includeBody: Boolean,
     maxTextChars: Int,
-    omittedReason: String,
-): MessageBodyView =
+): MessageBodyView? =
     if (includeBody) {
         serializeBody(
             bytes = payloadCapture.bodyBytes,
@@ -407,11 +442,7 @@ private fun serializeOptionalBody(
             omittedReason = "body serialization returned null",
         )
     } else {
-        MessageBodyView(
-            encoding = BodyEncoding.OMITTED,
-            size = payloadCapture.bodyBytes.size,
-            omittedReason = omittedReason,
-        )
+        null
     }
 
 private fun serializeOptionalRaw(
@@ -446,33 +477,23 @@ private fun isSyntheticErrorResponse(
     return normalizedVersion.isBlank() && ("timed out" in normalizedReason || "timeout" in normalizedReason)
 }
 
-private fun syntheticUnavailableBody(
-    includeBody: Boolean,
-    omittedReason: String,
-): MessageBodyView =
+private fun syntheticUnavailableBody(includeBody: Boolean): MessageBodyView? =
     if (includeBody) {
         MessageBodyView(
             encoding = BodyEncoding.OMITTED,
             size = 0,
-            omittedReason = omittedReason,
+            omittedReason = "body unavailable for synthetic timeout/error response",
         )
     } else {
-        MessageBodyView(
-            encoding = BodyEncoding.OMITTED,
-            size = 0,
-            omittedReason = "response body excluded by includeResponseBody=false",
-        )
+        null
     }
 
-private fun syntheticUnavailableRaw(
-    includeRaw: Boolean,
-    omittedReason: String,
-): MessageBodyView? =
+private fun syntheticUnavailableRaw(includeRaw: Boolean): MessageBodyView? =
     if (includeRaw) {
         MessageBodyView(
             encoding = BodyEncoding.OMITTED,
             size = 0,
-            omittedReason = omittedReason,
+            omittedReason = "raw response unavailable for synthetic timeout/error response",
         )
     } else {
         null

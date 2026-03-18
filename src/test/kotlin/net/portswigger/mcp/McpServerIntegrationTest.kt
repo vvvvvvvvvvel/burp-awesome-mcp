@@ -474,6 +474,32 @@ class McpServerIntegrationTest {
         }
 
     @Test
+    fun `scope check should not call Burp scope API with raw short prefix`() =
+        runBlocking {
+            every { api.scope().isInScope(any()) } answers {
+                val candidate = firstArg<String>()
+                if (candidate == "a/") {
+                    throw IllegalArgumentException("raw short prefix is not a valid scope URL")
+                }
+                candidate == "https://a/"
+            }
+
+            client.connectToServer("http://127.0.0.1:$port")
+            val result =
+                client.callTool(
+                    "scope_is_url_in_scope",
+                    mapOf("url" to "a/"),
+                )
+
+            assertTrue(result.isError != true, "scope_is_url_in_scope should not fail on short prefix")
+            val payload =
+                result.content
+                    .filterIsInstance<TextContent>()
+                    .joinToString("\n") { it.text }
+            assertTrue(payload.contains("\"in_scope\":true"), "scope_is_url_in_scope should use normalized short-prefix fallback: $payload")
+        }
+
+    @Test
     fun `scope tools should fail fast on invalid project options json`() =
         runBlocking {
             val burpSuite = mockk<BurpSuite>(relaxed = true)

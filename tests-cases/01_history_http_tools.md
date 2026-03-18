@@ -28,17 +28,25 @@
   - `time_from` (string|null): ISO-8601 lower bound (inclusive).
   - `time_to` (string|null): ISO-8601 upper bound (inclusive).
 - `serialization` (object):
-  - `include_headers` (bool, default `true`)
-  - `include_request_body` (bool, default `true`)
-  - `include_response_body` (bool, default `true`)
-  - `include_raw_request` (bool, default `false`)
-  - `include_raw_response` (bool, default `false`)
   - `include_binary` (bool, default `false`)
   - `max_text_body_chars` (int, default `1024`)
   - `max_request_body_chars` (int|null): request-body-specific override.
   - `max_response_body_chars` (int|null): response-body-specific override.
   - `text_overflow_mode` (`truncate|omit`, default `omit`)
   - `max_binary_body_bytes` (int, default `65536`)
+  - `regex_excerpt` (object|null):
+    - `context_chars` (int, default `10`)
+    - `regex` (string|null): excerpt pattern
+- `fields` (string[]|null): include only listed item-relative paths such as `id`, `time`, `listener_port`, `request.method`, `request.url`, `response.status_code`.
+- `exclude_fields` (string[]|null): exclude listed item-relative paths from otherwise optimized default items.
+- only one of `fields` or `exclude_fields` may be non-null; both `null` means optimized default item shape.
+- with `fields`, request/response headers and bodies are materialized only for selected branches.
+- with `exclude_fields` or with both projection fields null, the optimized default non-raw shape is materialized.
+- `request.raw` / `response.raw` are materialized only when explicitly requested in `fields`.
+- when `serialization.regex_excerpt` is enabled, `match_context` becomes available as a normal optional projection branch.
+- when `serialization.regex_excerpt` is enabled:
+  - `request.body`, `response.body`, `request.raw`, and `response.raw` must not be requested in `fields`
+- optimized default HTTP output omits `listener_port`, `edited`, `request.path`, `request.query`, `request.in_scope`, empty `response.cookies`, and duplicate stated/inferred MIME fields when they equal `response.mime_type`
 
 Example `filter` + `serialization`:
 ```json
@@ -56,11 +64,6 @@ Example `filter` + `serialization`:
     "time_to": "2026-03-31T23:59:59Z"
   },
   "serialization": {
-    "include_headers": true,
-    "include_request_body": true,
-    "include_response_body": true,
-    "include_raw_request": false,
-    "include_raw_response": false,
     "include_binary": false,
     "max_text_body_chars": 1024,
     "text_overflow_mode": "omit",
@@ -72,6 +75,8 @@ Example `filter` + `serialization`:
 ### `get_proxy_http_history_by_ids`
 - `ids` (int[]): exact Burp history IDs to fetch.
 - `serialization` (object): same fields and defaults as above.
+- `fields` / `exclude_fields`: same projection contract as `list_proxy_http_history`.
+- if excerpt mode is needed here, set `serialization.regex_excerpt.regex` explicitly.
 
 ### `summarize_http_history_cookies` / `summarize_http_history_auth_headers`
 - `limit` (int, default `50`): number of history entries scanned in the selected window.
@@ -110,7 +115,7 @@ Aggregation request example:
 - Expected:
 1. Response contains `total`, `results`, `next`.
 2. `results.length <= 5`.
-3. Every `results[*].request.in_scope` is `true` (default `filter.in_scope_only=true`).
+3. Result set respects `filter.in_scope_only=true` even though `request.in_scope` is omitted from the optimized default shape.
 4. If more matching entries exist, `next` is non-null and includes same filter+serialization.
 
 ## TC-HH-002 Query with explicit filter and serialization omit policy
@@ -129,11 +134,6 @@ Aggregation request example:
     "has_response": true
   },
   "serialization": {
-    "include_headers": true,
-    "include_request_body": true,
-    "include_response_body": true,
-    "include_raw_request": false,
-    "include_raw_response": false,
     "include_binary": false,
     "max_text_body_chars": 1024,
     "text_overflow_mode": "omit",
@@ -201,9 +201,6 @@ Aggregation request example:
 {
   "ids": [101, 102],
   "serialization": {
-    "include_headers": true,
-    "include_request_body": true,
-    "include_response_body": true,
     "text_overflow_mode": "omit"
   }
 }
@@ -213,6 +210,49 @@ Aggregation request example:
 1. Response has `requested`, `found`, `results`.
 2. Each requested ID returns either `item` or `error`.
 3. No scope filtering is applied by this tool.
+
+## TC-HH-006A History fields projection
+- Tool: `list_proxy_http_history`
+- Goal: verify item-level projection without breaking envelope.
+- Request:
+```json
+{
+  "start_id": 0,
+  "limit": 3,
+  "fields": ["id", "time", "request.method", "request.url", "response.status_code"]
+}
+```
+- Expected:
+1. Response still contains `total`, `results`, `next`.
+2. Each result item contains only `id`, `time`, `request`, `response`.
+3. `request` contains only `method` and `url`.
+4. `response` contains only `status_code` when a response exists.
+
+## TC-HH-006B History regex excerpts
+- Tool: `list_proxy_http_history`
+- Goal: verify compact regex triage without full body branches.
+- Request:
+```json
+{
+  "start_id": 0,
+  "id_direction": "decreasing",
+  "limit": 10,
+  "filter": {
+    "regex": "refresh"
+  },
+  "fields": ["id", "request.method", "request.url", "response.status_code"],
+  "serialization": {
+    "regex_excerpt": {
+      "context_chars": 48
+    }
+  }
+}
+```
+- Expected:
+1. Response contains `match_context` on each result item.
+2. `match_context` contains `excerpts`.
+3. `request.body` / `response.body` are absent from the result shape.
+4. Matching still works even though the matching branch is not present in final output.
 
 ## TC-HH-007 Extract cookie observations
 - Tool: `summarize_http_history_cookies`

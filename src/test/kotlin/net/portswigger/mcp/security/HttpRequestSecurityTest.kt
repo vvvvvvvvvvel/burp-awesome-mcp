@@ -12,6 +12,14 @@ import burp.api.montoya.proxy.ProxyHistoryFilter
 import burp.api.montoya.proxy.ProxyHttpRequestResponse
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonNamingStrategy
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import net.portswigger.mcp.tools.FieldProjection
+import net.portswigger.mcp.tools.applyItemFieldProjection
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertThrows
@@ -19,6 +27,14 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import java.time.ZonedDateTime
 import java.util.regex.Pattern
+
+@OptIn(ExperimentalSerializationApi::class)
+private val testJson =
+    Json {
+        encodeDefaults = true
+        explicitNulls = false
+        namingStrategy = JsonNamingStrategy.SnakeCase
+    }
 
 class HttpRequestSecurityTest {
     private lateinit var api: MontoyaApi
@@ -125,6 +141,70 @@ class HttpRequestSecurityTest {
 
         assertEquals(3, result.total)
         assertEquals(listOf(2), result.results.map { it.id })
+    }
+
+    @Test
+    fun `query should filter on source data even when projected output omits matching branch`() {
+        val all =
+            listOf(
+                mockHistoryItem(id = 1, inScope = true),
+                mockHistoryItem(id = 2, inScope = true),
+                mockHistoryItem(id = 3, inScope = true),
+            )
+
+        every { proxy.history() } returns all
+
+        val result =
+            service.queryHttpHistory(
+                QueryProxyHttpHistoryInput(
+                    filter = ProxyHttpHistoryFilterInput(regex = "id-2"),
+                    fields = listOf("id", "request.method"),
+                ),
+            )
+
+        assertEquals(listOf(2), result.results.map { it.id })
+        val payload =
+            testJson
+                .encodeToJsonElement(QueryHttpHistoryResult.serializer(), result)
+                .jsonObject
+        val projected =
+            applyItemFieldProjection(
+                payload,
+                FieldProjection(fields = setOf("id", "request.method")),
+            )
+        val first = projected["results"]!!.jsonArray.single().jsonObject
+        val request = first["request"]!!.jsonObject
+        assertNull(request["body"])
+        assertEquals("GET", request["method"]?.jsonPrimitive?.content)
+        assertNull(first["response"])
+    }
+
+    @Test
+    fun `query should build match context from excerpt regex while filtering by a different regex`() {
+        val all =
+            listOf(
+                mockHistoryItem(id = 1, inScope = true),
+                mockHistoryItem(id = 2, inScope = true),
+                mockHistoryItem(id = 3, inScope = true),
+            )
+
+        every { proxy.history() } returns all
+
+        val result =
+            service.queryHttpHistory(
+                QueryProxyHttpHistoryInput(
+                    filter = ProxyHttpHistoryFilterInput(regex = "id-2"),
+                    serialization =
+                        ProjectedHttpSerializationOptionsInput(
+                            regexExcerpt = RegexExcerptInput(regex = "example\\.com/2", contextChars = 6),
+                        ),
+                    fields = listOf("id", "request.method"),
+                ),
+            )
+
+        assertEquals(listOf(2), result.results.map { it.id })
+        val matchContext = result.results.single().matchContext
+        assertEquals("request.url", matchContext?.excerpts?.single()?.path)
     }
 
     @Test
@@ -447,7 +527,14 @@ class HttpRequestSecurityTest {
         every { item.hasResponse() } returns false
         every { item.contains(any<Pattern>()) } answers {
             val pattern = firstArg<Pattern>()
-            pattern.matcher("id-$id").find()
+            pattern
+                .matcher(
+                    buildString {
+                        append("id-$id\n")
+                        append(method).append(' ').append("https://$host/$id").append('\n')
+                        append("Host: ").append(host)
+                    },
+                ).find()
         }
 
         every { request.method() } returns method

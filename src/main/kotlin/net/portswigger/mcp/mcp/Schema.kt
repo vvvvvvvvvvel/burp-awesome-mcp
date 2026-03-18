@@ -58,38 +58,124 @@ private fun applyKnownPropertySchemaHints(
                         ),
                 )
             properties["keys"] = JsonObject(keysSchema + ("items" to hintedItems))
+            applyProjectionSchemaHints(properties, "key,url,in_scope,notes,request.*,response.*")
+            applyProjectedHttpSerializationHints(properties)
         }
 
         "QueryScannerIssuesInput" -> {
+            applyProjectionSchemaHints(
+                properties,
+                "name,severity,confidence,base_url,detail,remediation,issue_background," +
+                    "remediation_background,typical_severity,type_index,request_responses.*",
+            )
             val serializationSchema = properties["serialization"] as? JsonObject
             if (serializationSchema != null) {
-                val serializationDefault = SCANNER_HTTP_SERIALIZATION_DEFAULT
-                val serializationProperties = (serializationSchema["properties"] as? JsonObject)?.toMutableMap()
-                if (serializationProperties != null) {
-                    serializationProperties["include_request_body"] =
-                        appendDefault(
-                            serializationProperties["include_request_body"] ?: jsonType("boolean"),
-                            JsonPrimitive(false),
-                        )
-                    serializationProperties["include_response_body"] =
-                        appendDefault(
-                            serializationProperties["include_response_body"] ?: jsonType("boolean"),
-                            JsonPrimitive(false),
-                        )
-                    properties["serialization"] =
-                        JsonObject(
-                            serializationSchema +
-                                mapOf(
-                                    "default" to serializationDefault,
-                                    "properties" to JsonObject(serializationProperties),
-                                ),
-                        )
-                } else {
-                    properties["serialization"] = appendDefault(serializationSchema, serializationDefault)
-                }
+                properties["serialization"] = appendDefault(serializationSchema, PROJECTED_HTTP_SERIALIZATION_DEFAULT)
             }
+            applyScannerSerializationHints(properties)
+        }
+
+        "QueryProxyHttpHistoryInput" -> {
+            applyProjectionSchemaHints(properties, "id,time,listener_port,edited,notes,request.*,response.*")
+            applyProjectedHttpSerializationHints(properties)
+        }
+
+        "GetProxyHttpHistoryItemsInput" -> {
+            applyProjectionSchemaHints(properties, "id,time,listener_port,edited,notes,request.*,response.*")
+            applyProjectedHttpSerializationHints(properties)
+        }
+
+        "QuerySiteMapInput" -> {
+            applyProjectionSchemaHints(properties, "key,url,in_scope,notes,request.*,response.*")
+            applyProjectedHttpSerializationHints(properties)
+        }
+
+        "QueryOrganizerItemsInput" -> {
+            applyProjectionSchemaHints(properties, "id,status,url,in_scope,notes,request.*,response.*")
+            applyProjectedHttpSerializationHints(properties)
+        }
+
+        "GetOrganizerItemsInput" -> {
+            applyProjectionSchemaHints(properties, "id,status,url,in_scope,notes,request.*,response.*")
+            applyProjectedHttpSerializationHints(properties)
+        }
+
+        "SendHttp1RequestInput" -> {
+            applyProjectionSchemaHints(
+                properties,
+                "status_code,has_response,request.*,response.*",
+                "Projection paths relative to each successful result object inside results[].result. ",
+            )
+            applyProjectedHttpSerializationHints(properties)
+        }
+
+        "SendHttp2RequestInput" -> {
+            applyProjectionSchemaHints(
+                properties,
+                "status_code,has_response,request.*,response.*",
+                "Projection paths relative to each successful result object inside results[].result. ",
+            )
+            applyProjectedHttpSerializationHints(properties)
         }
     }
+}
+
+private fun applyProjectionSchemaHints(
+    properties: MutableMap<String, JsonElement>,
+    rootFieldsDescription: String,
+    prefixDescription: String = "Projection paths relative to each result item. ",
+) {
+    val description =
+        prefixDescription +
+            "Only one of fields or exclude_fields may be non-null. " +
+            "Use dotted paths such as request.method or response.status_code. Common roots: $rootFieldsDescription. " +
+            "When both are null, tools return an optimized default item shape rather than every available branch. " +
+            "When serialization.regex_excerpt is enabled, match_context becomes available as a normal optional projection branch."
+    listOf("fields", "exclude_fields").forEach { propertyName ->
+        val propertySchema = properties[propertyName] as? JsonObject ?: return@forEach
+        properties[propertyName] =
+            JsonObject(
+                propertySchema +
+                    mapOf(
+                        "description" to JsonPrimitive(description),
+                    ),
+            )
+    }
+}
+
+private fun applyProjectedHttpSerializationHints(properties: MutableMap<String, JsonElement>) {
+    val serializationSchema = properties["serialization"] as? JsonObject ?: return
+    properties["serialization"] =
+        JsonObject(
+            serializationSchema +
+                mapOf(
+                    "description" to
+                        JsonPrimitive(
+                            "Controls binary handling and body size/overflow limits. Headers, request/response bodies, " +
+                                "and raw branches are materialized automatically based on fields/exclude_fields. " +
+                                "Default item shapes omit redundant listener/scope/path/query branches and empty response cookies. " +
+                                "Raw branches are included only when explicitly requested in fields. " +
+                                "serialization.regex_excerpt adds match_context excerpts and cannot be combined with request.body, response.body, request.raw, or response.raw in fields.",
+                        ),
+                ),
+        )
+}
+
+private fun applyScannerSerializationHints(properties: MutableMap<String, JsonElement>) {
+    val serializationSchema = properties["serialization"] as? JsonObject ?: return
+    properties["serialization"] =
+        JsonObject(
+            serializationSchema +
+                mapOf(
+                    "description" to
+                        JsonPrimitive(
+                            "Controls binary handling and body size/overflow limits for request_responses. " +
+                                "Scanner issue detail, remediation, definition fields, and request_responses are " +
+                                "materialized automatically from fields/exclude_fields. " +
+                                "request_responses raw branches are included only when explicitly requested in fields.",
+                        ),
+                ),
+        )
 }
 
 @OptIn(ExperimentalSerializationApi::class)
@@ -226,7 +312,7 @@ private fun appendDefault(
 }
 
 private val HTTP_SERIALIZATION_DEFAULT = httpSerializationDefault()
-private val SCANNER_HTTP_SERIALIZATION_DEFAULT = scannerHttpSerializationDefault()
+private val PROJECTED_HTTP_SERIALIZATION_DEFAULT = projectedHttpSerializationDefault()
 private val WEBSOCKET_SERIALIZATION_DEFAULT = webSocketSerializationDefault()
 private val REQUEST_RESPONSE_FILTER_DEFAULT = requestResponseFilterDefault()
 private val PROXY_HTTP_HISTORY_FILTER_DEFAULT = proxyHttpHistoryFilterDefault()
@@ -249,13 +335,17 @@ private fun httpSerializationDefault(): JsonObject =
         ),
     )
 
-private fun scannerHttpSerializationDefault(): JsonObject =
+private fun projectedHttpSerializationDefault(): JsonObject =
     JsonObject(
-        HTTP_SERIALIZATION_DEFAULT +
-            mapOf(
-                "include_request_body" to JsonPrimitive(false),
-                "include_response_body" to JsonPrimitive(false),
-            ),
+        mapOf(
+            "include_binary" to JsonPrimitive(false),
+            "max_text_body_chars" to JsonPrimitive(1024),
+            "max_request_body_chars" to JsonNull,
+            "max_response_body_chars" to JsonNull,
+            "text_overflow_mode" to JsonPrimitive("omit"),
+            "max_binary_body_bytes" to JsonPrimitive(65_536),
+            "regex_excerpt" to JsonNull,
+        ),
     )
 
 private fun webSocketSerializationDefault(): JsonObject =
@@ -310,6 +400,7 @@ private fun webSocketFilterDefault(): JsonObject =
 private fun knownObjectDefault(serialName: String): JsonElement? =
     when (serialName.substringAfterLast('.')) {
         "HttpSerializationOptionsInput" -> HTTP_SERIALIZATION_DEFAULT
+        "ProjectedHttpSerializationOptionsInput" -> PROJECTED_HTTP_SERIALIZATION_DEFAULT
         "WebSocketSerializationOptionsInput" -> WEBSOCKET_SERIALIZATION_DEFAULT
         "HttpRequestResponseFilterInput" -> REQUEST_RESPONSE_FILTER_DEFAULT
         "ProxyHttpHistoryFilterInput" -> PROXY_HTTP_HISTORY_FILTER_DEFAULT
@@ -329,13 +420,17 @@ private fun knownPropertyDefault(
                 "start_id" -> JsonPrimitive(0)
                 "id_direction" -> JsonPrimitive("increasing")
                 "filter" -> PROXY_HTTP_HISTORY_FILTER_DEFAULT
-                "serialization" -> HTTP_SERIALIZATION_DEFAULT
+                "serialization" -> PROJECTED_HTTP_SERIALIZATION_DEFAULT
+                "fields" -> JsonNull
+                "exclude_fields" -> JsonNull
                 else -> null
             }
 
         "GetProxyHttpHistoryItemsInput" ->
             when (propertyName) {
-                "serialization" -> HTTP_SERIALIZATION_DEFAULT
+                "serialization" -> PROJECTED_HTTP_SERIALIZATION_DEFAULT
+                "fields" -> JsonNull
+                "exclude_fields" -> JsonNull
                 else -> null
             }
 
@@ -360,20 +455,26 @@ private fun knownPropertyDefault(
                 "limit" -> JsonPrimitive(20)
                 "start_after_key" -> JsonNull
                 "filter" -> REQUEST_RESPONSE_FILTER_DEFAULT
-                "serialization" -> HTTP_SERIALIZATION_DEFAULT
+                "serialization" -> PROJECTED_HTTP_SERIALIZATION_DEFAULT
+                "fields" -> JsonNull
+                "exclude_fields" -> JsonNull
                 else -> null
             }
 
         "GetSiteMapItemsInput" ->
             when (propertyName) {
-                "serialization" -> HTTP_SERIALIZATION_DEFAULT
+                "serialization" -> PROJECTED_HTTP_SERIALIZATION_DEFAULT
+                "fields" -> JsonNull
+                "exclude_fields" -> JsonNull
                 else -> null
             }
 
         "SendHttp1RequestInput" ->
             when (propertyName) {
                 "request_options" -> JsonNull
-                "serialization" -> HTTP_SERIALIZATION_DEFAULT
+                "serialization" -> PROJECTED_HTTP_SERIALIZATION_DEFAULT
+                "fields" -> JsonNull
+                "exclude_fields" -> JsonNull
                 "parallel" -> JsonPrimitive(false)
                 "parallel_rps" -> JsonPrimitive(10)
                 else -> null
@@ -382,7 +483,9 @@ private fun knownPropertyDefault(
         "SendHttp2RequestInput" ->
             when (propertyName) {
                 "request_options" -> JsonNull
-                "serialization" -> HTTP_SERIALIZATION_DEFAULT
+                "serialization" -> PROJECTED_HTTP_SERIALIZATION_DEFAULT
+                "fields" -> JsonNull
+                "exclude_fields" -> JsonNull
                 "parallel" -> JsonPrimitive(false)
                 "parallel_rps" -> JsonPrimitive(10)
                 else -> null
@@ -396,13 +499,10 @@ private fun knownPropertyDefault(
                 "confidence" -> JsonNull
                 "name_regex" -> JsonNull
                 "url_regex" -> JsonNull
-                "include_detail" -> JsonPrimitive(false)
-                "include_remediation" -> JsonPrimitive(false)
-                "include_definition" -> JsonPrimitive(false)
-                "include_request_response" -> JsonPrimitive(false)
                 "max_request_responses" -> JsonPrimitive(3)
-                "serialization" -> SCANNER_HTTP_SERIALIZATION_DEFAULT
-
+                "serialization" -> PROJECTED_HTTP_SERIALIZATION_DEFAULT
+                "fields" -> JsonNull
+                "exclude_fields" -> JsonNull
                 else -> null
             }
 
@@ -413,7 +513,17 @@ private fun knownPropertyDefault(
                 "id_direction" -> JsonPrimitive("increasing")
                 "status" -> JsonNull
                 "filter" -> REQUEST_RESPONSE_FILTER_DEFAULT
-                "serialization" -> HTTP_SERIALIZATION_DEFAULT
+                "serialization" -> PROJECTED_HTTP_SERIALIZATION_DEFAULT
+                "fields" -> JsonNull
+                "exclude_fields" -> JsonNull
+                else -> null
+            }
+
+        "GetOrganizerItemsInput" ->
+            when (propertyName) {
+                "serialization" -> PROJECTED_HTTP_SERIALIZATION_DEFAULT
+                "fields" -> JsonNull
+                "exclude_fields" -> JsonNull
                 else -> null
             }
 
@@ -431,6 +541,8 @@ private fun knownPropertyDefault(
             }
 
         "HttpSerializationOptionsInput" -> HTTP_SERIALIZATION_DEFAULT[propertyName]
+
+        "ProjectedHttpSerializationOptionsInput" -> PROJECTED_HTTP_SERIALIZATION_DEFAULT[propertyName]
 
         "WebSocketSerializationOptionsInput" -> WEBSOCKET_SERIALIZATION_DEFAULT[propertyName]
 

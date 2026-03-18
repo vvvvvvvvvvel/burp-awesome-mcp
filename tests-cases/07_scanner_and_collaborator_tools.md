@@ -36,23 +36,22 @@
 - `confidence` (`certain|firm|tentative`[]|null)
 - `name_regex` (string|null)
 - `url_regex` (string|null)
-- `include_detail` (bool, default `false`)
-- `include_remediation` (bool, default `false`)
-- `include_definition` (bool, default `false`)
-- `include_request_response` (bool, default `false`)
 - `max_request_responses` (int, default `3`)
-- `serialization` (object; default keeps headers and omits request/response bodies):
-  - `include_headers` (bool, default `true`)
-  - `include_request_body` (bool, default `false` for this tool)
-  - `include_response_body` (bool, default `false` for this tool)
-  - `include_raw_request` (bool, default `false`)
-  - `include_raw_response` (bool, default `false`)
+- `fields` / `exclude_fields` (string[]|null): projection over scanner issue items
+- `serialization` (object; affects attached `request_responses` only):
   - `include_binary` (bool, default `false`)
   - `max_text_body_chars` (int, default `1024`)
   - `max_request_body_chars` (int|null)
   - `max_response_body_chars` (int|null)
   - `text_overflow_mode` (`truncate|omit`, default `omit`)
   - `max_binary_body_bytes` (int, default `65536`)
+
+Scanner projection notes:
+- default response is light: no `detail`, `remediation`, definition fields, or `request_responses`
+- include those branches explicitly through `fields`
+- `request_responses` is plural because one scanner issue can carry multiple attached request/response pairs
+- `request_responses` nested HTTP branches follow the same projection rules as history/site-map/organizer
+- `request_responses.request.raw` / `request_responses.response.raw` are materialized only when explicitly requested in `fields`
 
 `list_scanner_issues` filter example:
 ```json
@@ -63,15 +62,21 @@
   "confidence": ["certain", "firm"],
   "name_regex": "sql|xss",
   "url_regex": "example",
-  "include_detail": true,
-  "include_remediation": true,
-  "include_definition": true,
-  "include_request_response": true,
   "max_request_responses": 2,
+  "fields": [
+    "name",
+    "severity",
+    "confidence",
+    "base_url",
+    "detail",
+    "remediation",
+    "issue_background",
+    "remediation_background",
+    "typical_severity",
+    "type_index",
+    "request_responses"
+  ],
   "serialization": {
-    "include_headers": true,
-    "include_request_body": false,
-    "include_response_body": false,
     "text_overflow_mode": "omit"
   }
 }
@@ -196,15 +201,21 @@ Collaborator polling examples:
   "confidence": ["certain", "firm"],
   "name_regex": "sql|xss",
   "url_regex": "example",
-  "include_detail": true,
-  "include_remediation": true,
-  "include_definition": true,
-  "include_request_response": true,
   "max_request_responses": 2,
+  "fields": [
+    "name",
+    "severity",
+    "confidence",
+    "base_url",
+    "detail",
+    "remediation",
+    "issue_background",
+    "remediation_background",
+    "typical_severity",
+    "type_index",
+    "request_responses"
+  ],
   "serialization": {
-    "include_headers": true,
-    "include_request_body": false,
-    "include_response_body": false,
     "text_overflow_mode": "omit"
   }
 }

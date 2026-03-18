@@ -199,11 +199,6 @@ class ManualCasesLiveIntegrationTest {
                                 ),
                             "serialization" to
                                 mapOf(
-                                    "include_headers" to true,
-                                    "include_request_body" to true,
-                                    "include_response_body" to true,
-                                    "include_raw_request" to false,
-                                    "include_raw_response" to false,
                                     "include_binary" to false,
                                     "max_text_body_chars" to 1024,
                                     "text_overflow_mode" to "omit",
@@ -288,12 +283,7 @@ class ManualCasesLiveIntegrationTest {
                         mapOf(
                             "ids" to ids,
                             "serialization" to
-                                mapOf(
-                                    "include_headers" to true,
-                                    "include_request_body" to true,
-                                    "include_response_body" to true,
-                                    "text_overflow_mode" to "omit",
-                                ),
+                                mapOf("text_overflow_mode" to "omit"),
                         ),
                     )
                 val found = payload["found"]?.jsonPrimitive?.intOrNull ?: -1
@@ -459,12 +449,7 @@ class ManualCasesLiveIntegrationTest {
                                     "has_response" to true,
                                 ),
                             "serialization" to
-                                mapOf(
-                                    "include_headers" to true,
-                                    "include_request_body" to false,
-                                    "include_response_body" to false,
-                                    "text_overflow_mode" to "omit",
-                                ),
+                                mapOf("text_overflow_mode" to "omit"),
                         ),
                     )
                 val results = payload["results"]?.jsonArray ?: JsonArray(emptyList())
@@ -496,8 +481,7 @@ class ManualCasesLiveIntegrationTest {
                         "get_site_map_by_keys",
                         mapOf(
                             "keys" to listOf(siteMapKey!!, "unknown-key-${System.currentTimeMillis()}"),
-                            "serialization" to
-                                mapOf("include_headers" to true, "include_response_body" to true, "text_overflow_mode" to "omit"),
+                            "serialization" to mapOf("text_overflow_mode" to "omit"),
                         ),
                     )
                 val found = payload["found"]?.jsonPrimitive?.intOrNull ?: -1
@@ -551,11 +535,7 @@ class ManualCasesLiveIntegrationTest {
                             "limit" to 10,
                             "filter" to mapOf("in_scope_only" to false),
                             "serialization" to
-                                mapOf(
-                                    "include_headers" to true,
-                                    "include_response_body" to false,
-                                    "text_overflow_mode" to "omit",
-                                ),
+                                mapOf("text_overflow_mode" to "omit"),
                         ),
                     )
                 organizerIds = payload["results"]?.jsonArray?.mapNotNull { it.jsonObject["id"]?.jsonPrimitive?.intOrNull } ?: emptyList()
@@ -573,11 +553,7 @@ class ManualCasesLiveIntegrationTest {
                         mapOf(
                             "ids" to listOf(organizerIds.first()),
                             "serialization" to
-                                mapOf(
-                                    "include_headers" to true,
-                                    "include_response_body" to true,
-                                    "text_overflow_mode" to "omit",
-                                ),
+                                mapOf("text_overflow_mode" to "omit"),
                         ),
                     )
                 val found = payload["found"]?.jsonPrimitive?.intOrNull ?: -1
@@ -625,8 +601,8 @@ class ManualCasesLiveIntegrationTest {
                                     ),
                                 ),
                             "parallel" to false,
-                            "serialization" to
-                                mapOf("include_headers" to true, "include_response_body" to true, "text_overflow_mode" to "omit"),
+                            "fields" to listOf("status_code", "has_response", "response.status_code", "response.body"),
+                            "serialization" to mapOf("text_overflow_mode" to "omit"),
                         ),
                     )
                 val firstOk =
@@ -1056,16 +1032,23 @@ class ManualCasesLiveIntegrationTest {
                         "confidence" to listOf("certain", "firm"),
                         "name_regex" to "sql|xss",
                         "url_regex" to "127\\.0\\.0\\.1|example",
-                        "include_detail" to true,
-                        "include_remediation" to true,
-                        "include_definition" to true,
-                        "include_request_response" to true,
                         "max_request_responses" to 2,
+                        "fields" to
+                            listOf(
+                                "name",
+                                "severity",
+                                "confidence",
+                                "base_url",
+                                "detail",
+                                "remediation",
+                                "issue_background",
+                                "remediation_background",
+                                "typical_severity",
+                                "type_index",
+                                "request_responses",
+                            ),
                         "serialization" to
                             mapOf(
-                                "include_headers" to true,
-                                "include_request_body" to false,
-                                "include_response_body" to false,
                                 "text_overflow_mode" to "omit",
                             ),
                     ),
@@ -1511,15 +1494,15 @@ class ManualCasesLiveIntegrationTest {
                 }
             is JsonObject -> element.mapValues { (_, value) -> jsonElementToKotlin(value) }
             is JsonArray -> element.map { value -> jsonElementToKotlin(value) }
-            else -> null
         }
 
     @Suppress("UNCHECKED_CAST")
     private fun Any?.asMap(): Map<String, Any> =
-        when (this) {
-            is Map<*, *> -> this.filterKeys { it is String }.mapKeys { it.key as String } as Map<String, Any>
-            else -> emptyMap()
-        }
+        (this as? Map<*, *>)
+            ?.filterKeys { it is String }
+            ?.mapKeys { it.key as String } as? Map<String, Any>
+            ?: emptyMap()
+            ?: emptyMap()
 
     private fun resolveValue(
         systemProperty: String,

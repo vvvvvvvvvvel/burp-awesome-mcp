@@ -144,9 +144,6 @@ class LiveBurpMcpIntegrationTest {
                         "filter" to mapOf("in_scope_only" to false),
                         "serialization" to
                             mapOf(
-                                "include_headers" to false,
-                                "include_request_body" to false,
-                                "include_response_body" to false,
                                 "max_text_body_chars" to 128,
                                 "text_overflow_mode" to "omit",
                             ),
@@ -201,12 +198,7 @@ class LiveBurpMcpIntegrationTest {
                                 ),
                             "parallel" to false,
                             "parallel_rps" to 1,
-                            "serialization" to
-                                mapOf(
-                                    "include_headers" to false,
-                                    "include_request_body" to false,
-                                    "include_response_body" to false,
-                                ),
+                            "fields" to listOf("status_code", "has_response"),
                         ),
                     )
                 assertFalse(sendResult.isError == true, "send_http1_requests failed: ${extractText(sendResult)}")
@@ -224,6 +216,39 @@ class LiveBurpMcpIntegrationTest {
                     "send_http1_requests result is not ok: ${extractText(sendResult)}",
                 )
 
+                val sendExcerptResult =
+                    client.callTool(
+                        "send_http1_requests",
+                        mapOf(
+                            "items" to
+                                listOf(
+                                    mapOf(
+                                        "content" to buildAbsoluteProxyRequest(runId),
+                                        "target_hostname" to "127.0.0.1",
+                                        "target_port" to listenerPort,
+                                        "uses_https" to false,
+                                    ),
+                                ),
+                            "fields" to listOf("status_code", "has_response", "response.status_code"),
+                            "serialization" to
+                                mapOf(
+                                    "regex_excerpt" to
+                                        mapOf(
+                                            "regex" to "Example Domain",
+                                            "context_chars" to 24,
+                                        ),
+                                ),
+                        ),
+                    )
+                assertFalse(
+                    sendExcerptResult.isError == true,
+                    "send_http1_requests(regex_excerpt) failed: ${extractText(sendExcerptResult)}",
+                )
+                val sendExcerptPayload = parseObject(extractText(sendExcerptResult))
+                val sendExcerptItem = sendExcerptPayload["results"]!!.jsonArray.first().jsonObject
+                val sendExcerptSummary = sendExcerptItem["result"]!!.jsonObject
+                assertTrue(sendExcerptSummary.containsKey("match_context"), "send_http1_requests did not return match_context")
+
                 val regexQueryResult =
                     client.callTool(
                         "list_proxy_http_history",
@@ -238,9 +263,6 @@ class LiveBurpMcpIntegrationTest {
                                 ),
                             "serialization" to
                                 mapOf(
-                                    "include_headers" to true,
-                                    "include_request_body" to true,
-                                    "include_response_body" to false,
                                     "max_text_body_chars" to 512,
                                     "text_overflow_mode" to "omit",
                                 ),
@@ -280,6 +302,36 @@ class LiveBurpMcpIntegrationTest {
                     "history query returned entries from unexpected listener port",
                 )
 
+                val regexExcerptQueryResult =
+                    client.callTool(
+                        "list_proxy_http_history",
+                        mapOf(
+                            "limit" to 20,
+                            "start_id" to 0,
+                            "filter" to
+                                mapOf(
+                                    "in_scope_only" to false,
+                                    "regex" to runId,
+                                    "listener_ports" to listOf(listenerPort),
+                                ),
+                            "fields" to listOf("id", "request.url", "response.status_code"),
+                            "serialization" to
+                                mapOf(
+                                    "regex_excerpt" to
+                                        mapOf(
+                                            "context_chars" to 20,
+                                        ),
+                                ),
+                        ),
+                    )
+                assertFalse(
+                    regexExcerptQueryResult.isError == true,
+                    "list_proxy_http_history(regex_excerpt) failed: ${extractText(regexExcerptQueryResult)}",
+                )
+                val regexExcerptPayload = parseObject(extractText(regexExcerptQueryResult))
+                val regexExcerptFirst = regexExcerptPayload["results"]!!.jsonArray.first().jsonObject
+                assertTrue(regexExcerptFirst.containsKey("match_context"), "list_proxy_http_history did not return match_context")
+
                 val firstMatchedId =
                     regexResults
                         .first()
@@ -294,13 +346,16 @@ class LiveBurpMcpIntegrationTest {
                         "get_proxy_http_history_by_ids",
                         mapOf(
                             "ids" to listOf(firstMatchedId!!),
+                            "fields" to listOf("id", "request.url"),
                             "serialization" to
                                 mapOf(
-                                    "include_headers" to true,
-                                    "include_request_body" to true,
-                                    "include_response_body" to false,
                                     "max_text_body_chars" to 512,
                                     "text_overflow_mode" to "omit",
+                                    "regex_excerpt" to
+                                        mapOf(
+                                            "regex" to runId,
+                                            "context_chars" to 16,
+                                        ),
                                 ),
                         ),
                     )
@@ -329,6 +384,15 @@ class LiveBurpMcpIntegrationTest {
                     requestUrl.contains("example.com", ignoreCase = true),
                     "expected example.com in looked-up request URL, got '$requestUrl'",
                 )
+                val getByIdMatchContext =
+                    getByIdPayload["results"]
+                        ?.jsonArray
+                        ?.firstOrNull()
+                        ?.jsonObject
+                        ?.get("item")
+                        ?.jsonObject
+                        ?.get("match_context")
+                assertTrue(getByIdMatchContext != null, "get_proxy_http_history_by_ids did not return match_context")
 
                 val cookiesResult =
                     client.callTool(
@@ -416,12 +480,7 @@ class LiveBurpMcpIntegrationTest {
                                 "limit" to 20,
                                 "start_after_key" to "",
                                 "filter" to mapOf("in_scope_only" to false, "regex" to runId),
-                                "serialization" to
-                                    mapOf(
-                                        "include_headers" to false,
-                                        "include_request_body" to false,
-                                        "include_response_body" to false,
-                                    ),
+                                "serialization" to emptyMap<String, Any>(),
                             ),
                         )
                     assertFalse(queryResult.isError == true, "list_site_map failed: ${extractText(queryResult)}")
@@ -447,12 +506,7 @@ class LiveBurpMcpIntegrationTest {
                                 "limit" to 20,
                                 "start_after_key" to "",
                                 "filter" to mapOf("in_scope_only" to false),
-                                "serialization" to
-                                    mapOf(
-                                        "include_headers" to false,
-                                        "include_request_body" to false,
-                                        "include_response_body" to false,
-                                    ),
+                                "serialization" to emptyMap<String, Any>(),
                             ),
                         )
                     assertFalse(fallbackResult.isError == true, "list_site_map fallback failed: ${extractText(fallbackResult)}")
@@ -483,11 +537,14 @@ class LiveBurpMcpIntegrationTest {
                         "get_site_map_by_keys",
                         mapOf(
                             "keys" to listOf(key!!),
+                            "fields" to listOf("key", "request.url"),
                             "serialization" to
                                 mapOf(
-                                    "include_headers" to false,
-                                    "include_request_body" to false,
-                                    "include_response_body" to false,
+                                    "regex_excerpt" to
+                                        mapOf(
+                                            "regex" to runId,
+                                            "context_chars" to 16,
+                                        ),
                                 ),
                         ),
                     )
@@ -506,6 +563,15 @@ class LiveBurpMcpIntegrationTest {
                         ?.jsonPrimitive
                         ?.contentOrNull
                 assertEquals(key, lookedUpKey, "looked up site map item key does not match requested key")
+                val siteMapMatchContext =
+                    getPayload["results"]
+                        ?.jsonArray
+                        ?.firstOrNull()
+                        ?.jsonObject
+                        ?.get("item")
+                        ?.jsonObject
+                        ?.get("match_context")
+                assertTrue(siteMapMatchContext != null, "get_site_map_by_keys did not return match_context")
             } finally {
                 if (exampleScopeAdded) {
                     cleanupScopePrefix("example.com", "include")
@@ -563,18 +629,6 @@ class LiveBurpMcpIntegrationTest {
                 "required=${scannerTool!!.inputSchema.required} schema=${scannerTool.inputSchema}",
             )
 
-            val schemaProperties = scannerTool.inputSchema.properties as? JsonObject
-            val includeDetailDefault =
-                (schemaProperties?.get("include_detail") as? JsonObject)
-                    ?.get("default")
-                    ?.jsonPrimitive
-                    ?.booleanOrNull
-            val includeRemediationDefault =
-                (schemaProperties?.get("include_remediation") as? JsonObject)
-                    ?.get("default")
-                    ?.jsonPrimitive
-                    ?.booleanOrNull
-
             val result = client.callTool("list_scanner_issues", emptyMap())
             val payloadText = extractText(result)
 
@@ -586,32 +640,7 @@ class LiveBurpMcpIntegrationTest {
                     assumeTrue(true)
                     return@runBlocking
                 }
-
-                val fallback =
-                    client.callTool(
-                        "list_scanner_issues",
-                        mapOf(
-                            "include_detail" to false,
-                            "include_remediation" to false,
-                        ),
-                    )
-                val fallbackText = extractText(fallback)
-                McpTestTrace.log(
-                    "LiveBurpMcpIntegrationTest",
-                    "scanner.fallback",
-                    "isError=${fallback.isError} payload=$fallbackText",
-                )
-                if (fallback.isError != true && (includeDetailDefault == true || includeRemediationDefault == true)) {
-                    throw AssertionError(
-                        "Live endpoint exposes outdated scanner schema defaults " +
-                            "(include_detail=$includeDetailDefault, include_remediation=$includeRemediationDefault) " +
-                            "and rejects empty input. Reload Burp extension from latest build/libs/burp-awesome-mcp.jar.",
-                    )
-                }
-                throw AssertionError(
-                    "list_scanner_issues default call failed unexpectedly: $payloadText ; " +
-                        "fallback_error=${fallback.isError} fallback_preview=${fallbackText.take(240)}",
-                )
+                throw AssertionError("list_scanner_issues default call failed unexpectedly: $payloadText")
             }
 
             val payload = parseObject(payloadText)

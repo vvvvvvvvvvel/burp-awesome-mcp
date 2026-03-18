@@ -11,6 +11,7 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ktor)
     alias(libs.plugins.ktlint)
+    alias(libs.plugins.kover)
     java
 }
 
@@ -42,7 +43,8 @@ val generateBuildFlags by
                 package net.portswigger.mcp.core
 
                 object BuildFlags {
-                    const val DEBUG_BUILD: Boolean = $debugEnabled
+                    @Suppress("SameReturnValue")
+                    fun debugBuildEnabled(): Boolean = $debugEnabled
                 }
                 """.trimIndent() + "\n",
             )
@@ -355,6 +357,12 @@ tasks {
         description = "Runs Kotlin formatter and linter (ktlintFormat + ktlintCheck)."
         dependsOn("ktlintFormat")
         finalizedBy("ktlintCheck")
+    }
+
+    register("coverageReport") {
+        group = "verification"
+        description = "Runs unit tests and generates Kover HTML/XML coverage reports."
+        dependsOn("test", "koverHtmlReport", "koverXmlReport")
     }
 
     withType<AbstractArchiveTask>().configureEach {

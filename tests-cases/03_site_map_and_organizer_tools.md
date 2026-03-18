@@ -22,17 +22,26 @@
   - `time_from` (string|null, ISO-8601)
   - `time_to` (string|null, ISO-8601)
 - `serialization` fields (`list_site_map`, `get_site_map_by_keys`, `list_organizer_items`, `get_organizer_items_by_ids`):
-  - `include_headers` (bool, default `true`)
-  - `include_request_body` (bool, default `true`)
-  - `include_response_body` (bool, default `true`)
-  - `include_raw_request` (bool, default `false`)
-  - `include_raw_response` (bool, default `false`)
   - `include_binary` (bool, default `false`)
   - `max_text_body_chars` (int, default `1024`)
   - `max_request_body_chars` (int|null)
   - `max_response_body_chars` (int|null)
   - `text_overflow_mode` (`truncate|omit`, default `omit`)
   - `max_binary_body_bytes` (int, default `65536`)
+  - `regex_excerpt` (object|null):
+    - `context_chars` (int, default `10`)
+    - `regex` (string|null): excerpt pattern
+- `fields` / `exclude_fields`:
+  - item-level projection only
+  - dotted paths such as `key`, `url`, `request.method`, `request.url`, `response.status_code`
+  - only one of them may be non-null
+  - both `null` means optimized default item shape
+  - with `fields`, request/response headers and bodies are materialized only for selected branches
+  - with `exclude_fields` or with both projection fields null, the optimized default non-raw shape is materialized
+  - `request.raw` / `response.raw` are materialized only when explicitly requested in `fields`
+  - when `serialization.regex_excerpt` is enabled, `match_context` becomes available as a normal optional projection branch
+  - when `serialization.regex_excerpt` is enabled, `request.body`, `response.body`, `request.raw`, and `response.raw` must not be requested in `fields`
+  - optimized default HTTP output omits root `in_scope`, `request.path`, `request.query`, `request.in_scope`, empty `response.cookies`, and duplicate stated/inferred MIME fields when they equal `response.mime_type`
 
 Example `filter` + `serialization`:
 ```json
@@ -47,9 +56,6 @@ Example `filter` + `serialization`:
     "has_response": true
   },
   "serialization": {
-    "include_headers": true,
-    "include_request_body": false,
-    "include_response_body": false,
     "text_overflow_mode": "omit"
   }
 }
@@ -60,10 +66,13 @@ Example `filter` + `serialization`:
 - `start_after_key` (string|null): cursor key from previous page `next`.
 - `filter` (object): shared HTTP filter above.
 - `serialization` (object): shared HTTP serialization above.
+- `fields` / `exclude_fields`: shared item projection contract above.
 
 ### `get_site_map_by_keys`
 - `keys` (string[]): exact Site Map keys from `list_site_map`.
 - `serialization` (object): shared HTTP serialization above.
+- `fields` / `exclude_fields`: shared item projection contract above.
+- if excerpt mode is needed here, set `serialization.regex_excerpt.regex` explicitly.
 
 ### `send_requests_to_organizer`
 - `items` (array): batch payload.
@@ -82,10 +91,12 @@ Example `filter` + `serialization`:
 - `status` (`unknown|new|in_progress|postponed|done|ignored`[]|null): status allow-list.
 - `filter` (object): shared HTTP filter above.
 - `serialization` (object): shared HTTP serialization above.
+- `fields` / `exclude_fields`: shared item projection contract above.
 
 ### `get_organizer_items_by_ids`
 - `ids` (int[]): exact organizer item IDs.
 - `serialization` (object): shared HTTP serialization above.
+- `fields` / `exclude_fields`: shared item projection contract above.
 
 ## Preconditions
 - Site Map is populated (visit multiple paths through Burp).
@@ -119,9 +130,6 @@ Example `filter` + `serialization`:
     "has_response": true
   },
   "serialization": {
-    "include_headers": true,
-    "include_request_body": false,
-    "include_response_body": false,
     "text_overflow_mode": "omit"
   }
 }
@@ -139,8 +147,6 @@ Example `filter` + `serialization`:
 {
   "keys": ["<key1>", "<key2>"],
   "serialization": {
-    "include_headers": true,
-    "include_response_body": true,
     "text_overflow_mode": "omit"
   }
 }
@@ -195,8 +201,6 @@ Example `filter` + `serialization`:
     "in_scope_only": false
   },
   "serialization": {
-    "include_headers": true,
-    "include_response_body": false,
     "text_overflow_mode": "omit"
   }
 }
@@ -214,8 +218,6 @@ Example `filter` + `serialization`:
 {
   "ids": [1, 2],
   "serialization": {
-    "include_headers": true,
-    "include_response_body": true,
     "text_overflow_mode": "omit"
   }
 }
@@ -243,3 +245,18 @@ Example `filter` + `serialization`:
 1. No validation/runtime error.
 2. If two or more items are returned, IDs are strictly descending.
 3. `next` (if non-null) keeps `id_direction: "decreasing"`.
+
+## TC-SO-009 Site Map projection
+- Tool: `list_site_map`
+- Request:
+```json
+{
+  "limit": 5,
+  "fields": ["key", "url", "request.method", "response.status_code"]
+}
+```
+- Expected:
+1. Response still contains `total`, `results`, `next`.
+2. Each item contains only `key`, `url`, `request`, and optional `response`.
+3. `request` contains only `method`.
+4. `response` contains only `status_code` when present.

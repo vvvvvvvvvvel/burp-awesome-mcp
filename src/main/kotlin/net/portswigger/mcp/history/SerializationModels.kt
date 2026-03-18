@@ -53,6 +53,23 @@ data class MessageBodyView(
 )
 
 @Serializable
+data class RegexExcerptInput(
+    val contextChars: Int = 10,
+    val regex: String? = null,
+)
+
+@Serializable
+data class MatchExcerpt(
+    val path: String,
+    val text: String,
+)
+
+@Serializable
+data class MatchContext(
+    val excerpts: List<MatchExcerpt>,
+)
+
+@Serializable
 data class SerializedCookie(
     val name: String,
     val value: String,
@@ -100,6 +117,7 @@ data class SerializedHttpHistoryEntry(
     val notes: String? = null,
     val request: SerializedHttpRequest,
     val response: SerializedHttpResponse? = null,
+    val matchContext: MatchContext? = null,
 )
 
 @Serializable
@@ -160,6 +178,7 @@ data class SerializedSiteMapEntry(
     val notes: String? = null,
     val request: SerializedHttpRequest,
     val response: SerializedHttpResponse? = null,
+    val matchContext: MatchContext? = null,
 )
 
 @Serializable
@@ -210,6 +229,17 @@ data class HttpSerializationOptionsInput(
     val maxResponseBodyChars: Int? = null,
     val textOverflowMode: TextOverflowMode = TextOverflowMode.OMIT,
     val maxBinaryBodyBytes: Int = 65_536,
+)
+
+@Serializable
+data class ProjectedHttpSerializationOptionsInput(
+    val includeBinary: Boolean = false,
+    val maxTextBodyChars: Int = 1_024,
+    val maxRequestBodyChars: Int? = null,
+    val maxResponseBodyChars: Int? = null,
+    val textOverflowMode: TextOverflowMode = TextOverflowMode.OMIT,
+    val maxBinaryBodyBytes: Int = 65_536,
+    val regexExcerpt: RegexExcerptInput? = null,
 )
 
 @Serializable
@@ -269,13 +299,17 @@ data class QueryProxyHttpHistoryInput(
     val idDirection: IdDirection = IdDirection.INCREASING,
     val limit: Int = 20,
     val filter: ProxyHttpHistoryFilterInput = ProxyHttpHistoryFilterInput(),
-    val serialization: HttpSerializationOptionsInput = HttpSerializationOptionsInput(),
+    val serialization: ProjectedHttpSerializationOptionsInput = ProjectedHttpSerializationOptionsInput(),
+    val fields: List<String>? = null,
+    val excludeFields: List<String>? = null,
 )
 
 @Serializable
 data class GetProxyHttpHistoryItemsInput(
     val ids: List<Int>,
-    val serialization: HttpSerializationOptionsInput = HttpSerializationOptionsInput(),
+    val serialization: ProjectedHttpSerializationOptionsInput = ProjectedHttpSerializationOptionsInput(),
+    val fields: List<String>? = null,
+    val excludeFields: List<String>? = null,
 )
 
 @Serializable
@@ -321,13 +355,17 @@ data class QuerySiteMapInput(
     val limit: Int = 20,
     val startAfterKey: String? = null,
     val filter: HttpRequestResponseFilterInput = HttpRequestResponseFilterInput(),
-    val serialization: HttpSerializationOptionsInput = HttpSerializationOptionsInput(),
+    val serialization: ProjectedHttpSerializationOptionsInput = ProjectedHttpSerializationOptionsInput(),
+    val fields: List<String>? = null,
+    val excludeFields: List<String>? = null,
 )
 
 @Serializable
 data class GetSiteMapItemsInput(
     val keys: List<String>,
-    val serialization: HttpSerializationOptionsInput = HttpSerializationOptionsInput(),
+    val serialization: ProjectedHttpSerializationOptionsInput = ProjectedHttpSerializationOptionsInput(),
+    val fields: List<String>? = null,
+    val excludeFields: List<String>? = null,
 )
 
 @Serializable

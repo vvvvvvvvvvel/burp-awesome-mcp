@@ -10,11 +10,23 @@ import burp.api.montoya.proxy.ProxyWebSocketMessage
 class HistoryQueryService(
     private val api: MontoyaApi,
 ) {
-    fun queryHttpHistory(input: QueryProxyHttpHistoryInput): QueryHttpHistoryResult {
+    internal fun queryHttpHistory(
+        input: QueryProxyHttpHistoryInput,
+        options: HttpSerializationOptions =
+            input.serialization.normalized(
+                resolveProjectedHttpMaterialization(
+                    input.fields?.toSet(),
+                    input.excludeFields?.toSet(),
+                    regexExcerptEnabled = input.serialization.regexExcerpt != null,
+                ),
+            ),
+        regexExcerpt: RegexExcerptConfig? = null,
+    ): QueryHttpHistoryResult {
         val normalizedLimit = input.limit.coerceIn(1, 500)
-        val options = input.toHttpSerializationOptions()
         val filter = compileProxyHttpHistoryFilter(input.filter)
-        val regexPattern = compileOptionalPattern(input.filter.regex, "filter.regex")
+        val regexControls = resolveListToolRegexControls(input.filter.regex, input.serialization)
+        val regexPattern = regexControls.filterPattern
+        val effectiveExcerpt = regexControls.excerptConfig ?: regexExcerpt
 
         val history = fetchHttpHistory(regex = null)
         val startIndex = findStartIndexById(history, input.startId, input.idDirection) { it.id() }
@@ -35,7 +47,14 @@ class HistoryQueryService(
                 items = selected.items,
             )
 
-        val mapped = hydratedSelection.map { mapHttpHistoryItem(it, options) }
+        val mapped =
+            hydratedSelection.map { item ->
+                mapHttpHistoryItem(
+                    item,
+                    options,
+                    matchContext = effectiveExcerpt?.let { buildProxyHttpMatchContext(item, it) },
+                )
+            }
         val next = selected.nextItem?.let { input.copy(startId = it.id()) }
 
         return QueryHttpHistoryResult(
@@ -45,9 +64,19 @@ class HistoryQueryService(
         )
     }
 
-    fun getHttpHistoryItems(input: GetProxyHttpHistoryItemsInput): GetHttpHistoryItemsResult {
+    internal fun getHttpHistoryItems(
+        input: GetProxyHttpHistoryItemsInput,
+        options: HttpSerializationOptions =
+            input.serialization.normalized(
+                resolveProjectedHttpMaterialization(
+                    input.fields?.toSet(),
+                    input.excludeFields?.toSet(),
+                    regexExcerptEnabled = input.serialization.regexExcerpt != null,
+                ),
+            ),
+        regexExcerpt: RegexExcerptConfig? = null,
+    ): GetHttpHistoryItemsResult {
         val ids = input.ids
-        val options = input.toHttpSerializationOptions()
         val foundById = fetchHttpHistoryByIds(ids.toSet())
 
         val results =
@@ -56,7 +85,15 @@ class HistoryQueryService(
                 if (item == null) {
                     HttpHistoryLookupItem(id = id, error = "not found")
                 } else {
-                    HttpHistoryLookupItem(id = id, item = mapHttpHistoryItem(item, options))
+                    HttpHistoryLookupItem(
+                        id = id,
+                        item =
+                            mapHttpHistoryItem(
+                                item,
+                                options,
+                                matchContext = regexExcerpt?.let { buildProxyHttpMatchContext(item, it) },
+                            ),
+                    )
                 }
             }
 
@@ -97,11 +134,23 @@ class HistoryQueryService(
         )
     }
 
-    fun querySiteMap(input: QuerySiteMapInput): QuerySiteMapResult {
+    internal fun querySiteMap(
+        input: QuerySiteMapInput,
+        options: HttpSerializationOptions =
+            input.serialization.normalized(
+                resolveProjectedHttpMaterialization(
+                    input.fields?.toSet(),
+                    input.excludeFields?.toSet(),
+                    regexExcerptEnabled = input.serialization.regexExcerpt != null,
+                ),
+            ),
+        regexExcerpt: RegexExcerptConfig? = resolveRegexExcerptConfig(input.serialization),
+    ): QuerySiteMapResult {
         val normalizedLimit = input.limit.coerceIn(1, 500)
-        val options = input.toHttpSerializationOptions()
         val filter = compileRequestResponseFilter(input.filter)
-        val regexPattern = compileOptionalPattern(input.filter.regex, "filter.regex")
+        val regexControls = resolveListToolRegexControls(input.filter.regex, input.serialization)
+        val regexPattern = regexControls.filterPattern
+        val effectiveExcerpt = regexControls.excerptConfig ?: regexExcerpt
 
         val siteMapItems = fetchSiteMap()
         val startIndex = resolveStartAfterKey(siteMapItems, input.startAfterKey)
@@ -119,7 +168,14 @@ class HistoryQueryService(
                     matchesRequestResponseFilter(item, filter)
             }
 
-        val mapped = selected.items.map { mapSiteMapItem(it, options) }
+        val mapped =
+            selected.items.map { item ->
+                mapSiteMapItem(
+                    item,
+                    options,
+                    matchContext = effectiveExcerpt?.let { buildSiteMapMatchContext(item, it) },
+                )
+            }
         val next = selected.nextItem?.let { input.copy(startAfterKey = siteMapStableKey(it)) }
         return QuerySiteMapResult(
             total = siteMapItems.size,
@@ -128,9 +184,19 @@ class HistoryQueryService(
         )
     }
 
-    fun getSiteMapItems(input: GetSiteMapItemsInput): GetSiteMapItemsResult {
+    internal fun getSiteMapItems(
+        input: GetSiteMapItemsInput,
+        options: HttpSerializationOptions =
+            input.serialization.normalized(
+                resolveProjectedHttpMaterialization(
+                    input.fields?.toSet(),
+                    input.excludeFields?.toSet(),
+                    regexExcerptEnabled = input.serialization.regexExcerpt != null,
+                ),
+            ),
+        regexExcerpt: RegexExcerptConfig? = resolveRegexExcerptConfig(input.serialization),
+    ): GetSiteMapItemsResult {
         val keys = input.keys
-        val options = input.toHttpSerializationOptions()
         val siteMapItems = fetchSiteMap()
         val foundByKey = indexByRequestedKeys(keys, siteMapItems) { siteMapStableKey(it) }
 
@@ -140,7 +206,15 @@ class HistoryQueryService(
                 if (item == null) {
                     SiteMapLookupItem(key = key, error = "not found")
                 } else {
-                    SiteMapLookupItem(key = key, item = mapSiteMapItem(item, options))
+                    SiteMapLookupItem(
+                        key = key,
+                        item =
+                            mapSiteMapItem(
+                                item,
+                                options,
+                                matchContext = regexExcerpt?.let { buildSiteMapMatchContext(item, it) },
+                            ),
+                    )
                 }
             }
 

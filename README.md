@@ -149,15 +149,11 @@ Cookie delete note:
 - `generate_collaborator_payload`
 - `list_collaborator_interactions`
 
-`list_scanner_issues` defaults:
-- `include_detail=false`
-- `include_remediation=false`
-- set them to `true` when you explicitly need full descriptive text
-
 `list_scanner_issues` key inputs:
 - pagination: `limit`, `offset`
 - filters: `severity[]`, `confidence[]`, `name_regex`, `url_regex`
-- optional enrichment: `include_definition`, `include_request_response`, `max_request_responses`
+- optional enrichment cap: `max_request_responses`
+- optional item projection: `fields`, `exclude_fields`
 - optional body shaping for attached request/response snapshots: `serialization`
 
 `list_scanner_issues` output normalization:
@@ -207,6 +203,50 @@ Offset-list response shape (`list_scanner_issues`, `list_cookie_jar`):
 - `requested`
 - `found`
 - `results` with per-id/per-key success or error
+
+HTTP history / Site Map / Organizer projection:
+- optional top-level `fields` (string array)
+- optional top-level `exclude_fields` (string array)
+- only one of them may be non-null
+- both `null` = optimized default item payload
+- projection applies only to result items, not to envelope fields such as `total`, `next`, `requested`, `found`, or `results`
+- with `fields`, headers and request/response bodies are materialized only for selected branches
+- with `exclude_fields` or with both projection fields null, the optimized default non-raw shape is materialized
+- `request.raw` and `response.raw` are materialized only when explicitly requested in `fields`
+- filtering and regex matching happen on source Burp data before projection, so a record can match even when the matching branch is omitted from output
+- `match_context` is an optional result branch when `serialization.regex_excerpt` is enabled and can be projected through `fields` / `exclude_fields`
+- optimized default HTTP output omits:
+  - `listener_port`, `edited`
+  - root `in_scope`
+  - `request.path`, `request.query`, `request.in_scope`
+  - empty `response.cookies`
+  - `response.stated_mime_type` and `response.inferred_mime_type` when they are equal to `response.mime_type`
+- use dotted item-relative paths such as:
+  - `id`
+  - `time`
+  - `listener_port`
+  - `request.method`
+  - `request.url`
+  - `response.status_code`
+  - `response.body`
+
+Direct-send result projection:
+- `send_http1_requests` / `send_http2_requests` also support `fields` / `exclude_fields`
+- paths are relative to each successful `results[].result` object
+- common roots:
+  - `status_code`
+  - `has_response`
+  - `request.*`
+  - `response.*`
+
+Scanner issue projection:
+- `list_scanner_issues` also supports `fields` / `exclude_fields`
+- common roots:
+  - `name`, `severity`, `confidence`, `base_url`
+  - `detail`, `remediation`
+  - `issue_background`, `remediation_background`, `typical_severity`, `type_index`
+  - `request_responses.*`
+- `request_responses` is intentionally plural: a scanner issue may carry multiple attached request/response pairs
 
 Site Map key contract:
 - `list_site_map` returns `results[].key` (24-char hex stable key)
@@ -283,24 +323,31 @@ Paging behavior:
 ## Serialization model
 
 ### HTTP serialization controls
-All HTTP serialization controls are inside `serialization`:
-- `serialization.include_headers`
-- `serialization.include_request_body`
-- `serialization.include_response_body`
-- `serialization.include_raw_request`
-- `serialization.include_raw_response`
+For HTTP history / Site Map / Organizer / direct-send results / scanner request-response snapshots, `serialization` controls:
 - `serialization.include_binary`
 - `serialization.max_text_body_chars` (fallback limit)
 - `serialization.max_request_body_chars` (optional override)
 - `serialization.max_response_body_chars` (optional override)
 - `serialization.text_overflow_mode` = `omit` | `truncate`
 - `serialization.max_binary_body_bytes`
+- `serialization.regex_excerpt`
+  - `context_chars` (default `10`)
+  - `regex`
+- `serialization.regex_excerpt` must be an object, not a bare regex string
 
 Important:
-- these fields do **not** filter history/site map/query results
-- they only control how request/response payloads are serialized in tool output
+- these fields do **not** filter matching
+- they control binary handling and body size/overflow handling
+- headers, request/response bodies, and raw branches are materialized automatically from `fields` / `exclude_fields`
 - if `serialization` is omitted, defaults are used
 - if `serialization` is `{}`, defaults are also used
+- for HTTP history / Site Map / Organizer / direct sends / scanner issues, prefer `fields` / `exclude_fields` first when the goal is token reduction rather than body formatting
+- `serialization.regex_excerpt` is available for `list_proxy_http_history`, `get_proxy_http_history_by_ids`, `list_site_map`, `get_site_map_by_keys`, `list_organizer_items`, `send_http1_requests`, and `send_http2_requests`
+- when `serialization.regex_excerpt` is enabled:
+  - `match_context` becomes available per item/result
+  - `request.body`, `response.body`, `request.raw`, and `response.raw` must not be requested in `fields`
+  - if `fields` is `null`, body/raw branches are automatically trimmed from the optimized default shape
+  - `serialization.regex_excerpt.regex` is used for excerpts
 
 Default overflow policy:
 - `text_overflow_mode = omit`
@@ -308,6 +355,11 @@ Default overflow policy:
 - `max_binary_body_bytes = 65536` (64 KB)
 
 That means very large JS/HTML/text responses are omitted by default instead of returning low-signal truncated chunks.
+
+Scanner defaults:
+- `list_scanner_issues` stays light by default
+- `detail`, `remediation`, definition fields, and `request_responses` appear only when requested through `fields`
+- use `max_request_responses` to cap attached request/response pairs when `fields` includes `request_responses`
 
 ### WebSocket serialization controls
 - `serialization.include_binary`

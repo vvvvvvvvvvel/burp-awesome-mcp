@@ -8,6 +8,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import net.portswigger.mcp.history.QueryProxyHttpHistoryInput
 import net.portswigger.mcp.tools.QueryOrganizerItemsInput
 import net.portswigger.mcp.tools.QueryScannerIssuesInput
+import net.portswigger.mcp.tools.SendHttp1RequestInput
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -71,9 +72,9 @@ class ToolDslValidationTest {
 
         assertEquals(20, parsed.limit)
         assertEquals(0, parsed.offset)
-        assertEquals(false, parsed.includeDetail)
-        assertEquals(false, parsed.includeRemediation)
-        assertEquals(false, parsed.includeRequestResponse)
+        assertEquals(3, parsed.maxRequestResponses)
+        assertEquals(null, parsed.fields)
+        assertEquals(null, parsed.excludeFields)
     }
 
     @Test
@@ -92,7 +93,7 @@ class ToolDslValidationTest {
             )
 
         assertEquals(20, parsed.limit)
-        assertEquals(false, parsed.includeDetail)
+        assertEquals(3, parsed.maxRequestResponses)
     }
 
     @Test
@@ -199,5 +200,116 @@ class ToolDslValidationTest {
         assertEquals(2, parsed.startId)
         assertEquals("DECREASING", parsed.idDirection.name)
         assertEquals(false, parsed.filter.inScopeOnly)
+    }
+
+    @Test
+    fun `query history should normalize scalar fields projection input to arrays`() {
+        val raw =
+            Json
+                .parseToJsonElement(
+                    """{"fields":"request.method","exclude_fields":null}""",
+                ).let { it as JsonObject }
+
+        val parsed =
+            toolJson.decodeFromJsonElement(
+                QueryProxyHttpHistoryInput.serializer(),
+                raw.normalizeAgentInput(),
+            )
+
+        assertEquals(listOf("request.method"), parsed.fields)
+        assertEquals(null, parsed.excludeFields)
+    }
+
+    @Test
+    fun `query history should normalize csv fields projection input to arrays`() {
+        val raw =
+            Json
+                .parseToJsonElement(
+                    """{"fields":"id,request.method,response.status_code","exclude_fields":null}""",
+                ).let { it as JsonObject }
+
+        val parsed =
+            toolJson.decodeFromJsonElement(
+                QueryProxyHttpHistoryInput.serializer(),
+                raw.normalizeAgentInput(),
+            )
+
+        assertEquals(listOf("id", "request.method", "response.status_code"), parsed.fields)
+        assertEquals(null, parsed.excludeFields)
+    }
+
+    @Test
+    fun `query history should normalize numeric strings in serialization`() {
+        val raw =
+            Json
+                .parseToJsonElement(
+                    """{"serialization":{"max_request_body_chars":"0","max_response_body_chars":"400","max_text_body_chars":"400","max_binary_body_bytes":"65536","regex_excerpt":{"context_chars":"15","regex":"abc"}}}""",
+                ).let { it as JsonObject }
+
+        val parsed =
+            toolJson.decodeFromJsonElement(
+                QueryProxyHttpHistoryInput.serializer(),
+                raw.normalizeAgentInput(),
+            )
+
+        assertEquals(0, parsed.serialization.maxRequestBodyChars)
+        assertEquals(400, parsed.serialization.maxResponseBodyChars)
+        assertEquals(400, parsed.serialization.maxTextBodyChars)
+        assertEquals(65536, parsed.serialization.maxBinaryBodyBytes)
+        assertEquals(15, parsed.serialization.regexExcerpt!!.contextChars)
+    }
+
+    @Test
+    fun `send http1 input should normalize numeric strings`() {
+        val raw =
+            Json
+                .parseToJsonElement(
+                    """{"items":[{"content":"GET / HTTP/1.1\\r\\nHost: example.com\\r\\n\\r\\n","target_hostname":"example.com","target_port":"443","uses_https":true}],"parallel_rps":"5","request_options":{"response_timeout_ms":"1234"}}""",
+                ).let { it as JsonObject }
+
+        val parsed =
+            toolJson.decodeFromJsonElement(
+                SendHttp1RequestInput.serializer(),
+                raw.normalizeAgentInput(),
+            )
+
+        assertEquals(443, parsed.items.single().targetPort)
+        assertEquals(5, parsed.parallelRps)
+        assertEquals(1234L, parsed.requestOptions!!.responseTimeoutMs)
+    }
+
+    @Test
+    fun `send http1 input should parse request options from json string`() {
+        val raw =
+            Json
+                .parseToJsonElement(
+                    """{"items":[{"content":"GET / HTTP/1.1\\r\\nHost: example.com\\r\\n\\r\\n","target_hostname":"example.com","target_port":443,"uses_https":true}],"request_options":"{\"http_mode\":\"http_1\",\"response_timeout_ms\":\"1500\"}"}""",
+                ).let { it as JsonObject }
+
+        val parsed =
+            toolJson.decodeFromJsonElement(
+                SendHttp1RequestInput.serializer(),
+                raw.normalizeAgentInput(),
+            )
+
+        assertEquals("http_1", parsed.requestOptions!!.httpMode)
+        assertEquals(1500L, parsed.requestOptions!!.responseTimeoutMs)
+    }
+
+    @Test
+    fun `send http1 input should normalize follow redirects alias`() {
+        val raw =
+            Json
+                .parseToJsonElement(
+                    """{"items":[{"content":"GET / HTTP/1.1\\r\\nHost: example.com\\r\\n\\r\\n","target_hostname":"example.com","target_port":443,"uses_https":true}],"request_options":{"follow_redirects":false}}""",
+                ).let { it as JsonObject }
+
+        val parsed =
+            toolJson.decodeFromJsonElement(
+                SendHttp1RequestInput.serializer(),
+                raw.normalizeAgentInput(),
+            )
+
+        assertEquals("never", parsed.requestOptions!!.redirectionMode)
     }
 }

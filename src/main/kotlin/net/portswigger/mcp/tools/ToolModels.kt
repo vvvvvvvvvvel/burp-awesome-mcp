@@ -4,8 +4,9 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
 import net.portswigger.mcp.history.HttpRequestResponseFilterInput
-import net.portswigger.mcp.history.HttpSerializationOptionsInput
 import net.portswigger.mcp.history.IdDirection
+import net.portswigger.mcp.history.MatchContext
+import net.portswigger.mcp.history.ProjectedHttpSerializationOptionsInput
 import net.portswigger.mcp.history.SerializedHttpRequest
 import net.portswigger.mcp.history.SerializedHttpResponse
 import net.portswigger.mcp.history.SortOrder
@@ -22,7 +23,9 @@ data class SendHttp1RequestItem(
 data class SendHttp1RequestInput(
     val items: List<SendHttp1RequestItem>,
     val requestOptions: SendRequestOptionsInput? = null,
-    val serialization: HttpSerializationOptionsInput = HttpSerializationOptionsInput(),
+    val serialization: ProjectedHttpSerializationOptionsInput = ProjectedHttpSerializationOptionsInput(),
+    val fields: List<String>? = null,
+    val excludeFields: List<String>? = null,
     val parallel: Boolean = false,
     val parallelRps: Int = 10,
 )
@@ -48,7 +51,9 @@ data class HttpHeaderNameValueInput(
 data class SendHttp2RequestInput(
     val items: List<SendHttp2RequestItem>,
     val requestOptions: SendRequestOptionsInput? = null,
-    val serialization: HttpSerializationOptionsInput = HttpSerializationOptionsInput(),
+    val serialization: ProjectedHttpSerializationOptionsInput = ProjectedHttpSerializationOptionsInput(),
+    val fields: List<String>? = null,
+    val excludeFields: List<String>? = null,
     val parallel: Boolean = false,
     val parallelRps: Int = 10,
 )
@@ -216,16 +221,10 @@ data class QueryScannerIssuesInput(
     val confidence: List<ScannerIssueConfidenceFilter>? = null,
     val nameRegex: String? = null,
     val urlRegex: String? = null,
-    val includeDetail: Boolean = false,
-    val includeRemediation: Boolean = false,
-    val includeDefinition: Boolean = false,
-    val includeRequestResponse: Boolean = false,
     val maxRequestResponses: Int = 3,
-    val serialization: HttpSerializationOptionsInput =
-        HttpSerializationOptionsInput(
-            includeRequestBody = false,
-            includeResponseBody = false,
-        ),
+    val serialization: ProjectedHttpSerializationOptionsInput = ProjectedHttpSerializationOptionsInput(),
+    val fields: List<String>? = null,
+    val excludeFields: List<String>? = null,
 )
 
 @Serializable
@@ -354,6 +353,7 @@ data class SentRequestSummary(
     val hasResponse: Boolean,
     val request: SerializedHttpRequest,
     val response: SerializedHttpResponse? = null,
+    val matchContext: MatchContext? = null,
 )
 
 @Serializable
@@ -551,13 +551,17 @@ data class QueryOrganizerItemsInput(
     val limit: Int = 20,
     val status: List<OrganizerStatusFilter>? = null,
     val filter: HttpRequestResponseFilterInput = HttpRequestResponseFilterInput(),
-    val serialization: HttpSerializationOptionsInput = HttpSerializationOptionsInput(),
+    val serialization: ProjectedHttpSerializationOptionsInput = ProjectedHttpSerializationOptionsInput(),
+    val fields: List<String>? = null,
+    val excludeFields: List<String>? = null,
 )
 
 @Serializable
 data class GetOrganizerItemsInput(
     val ids: List<Int>,
-    val serialization: HttpSerializationOptionsInput = HttpSerializationOptionsInput(),
+    val serialization: ProjectedHttpSerializationOptionsInput = ProjectedHttpSerializationOptionsInput(),
+    val fields: List<String>? = null,
+    val excludeFields: List<String>? = null,
 )
 
 @Serializable
@@ -569,6 +573,7 @@ data class OrganizerItemSummary(
     val notes: String? = null,
     val request: SerializedHttpRequest,
     val response: SerializedHttpResponse? = null,
+    val matchContext: MatchContext? = null,
 )
 
 @Serializable

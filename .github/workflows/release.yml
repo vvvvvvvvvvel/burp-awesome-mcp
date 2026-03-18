@@ -86,7 +86,7 @@ jobs:
           mkdir -p "$RELEASE_DIR"
 
           cp "build/libs/burp-awesome-mcp.jar" "$RELEASE_DIR/$JAR_NAME"
-          cp "skills/SKILL.md" "$RELEASE_DIR/SKILL.md"
+          cp "SKILL.md" "$RELEASE_DIR/SKILL.md"
           cp "AGENTS.md" "$RELEASE_DIR/AGENTS.md"
           echo "jar_path=$RELEASE_DIR/$JAR_NAME" >> "$GITHUB_OUTPUT"
           echo "skill_path=$RELEASE_DIR/SKILL.md" >> "$GITHUB_OUTPUT"

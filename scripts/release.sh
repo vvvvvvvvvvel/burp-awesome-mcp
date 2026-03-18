@@ -172,13 +172,13 @@ fi
 sed -i -E "s/^version=.*/version=${VERSION}/" gradle.properties
 sed -i -E "s/^ScreenVersion: .*/ScreenVersion: ${VERSION}/" BappManifest.bmf
 sed -i -E "s/^SerialVersion: .*/SerialVersion: ${next_serial}/" BappManifest.bmf
-sed -i -E "s/^  version: \".*\"/  version: \"${VERSION}\"/" skills/SKILL.md
+sed -i -E "s/^  version: \".*\"/  version: \"${VERSION}\"/" SKILL.md
 
 if [[ "$SKIP_CHECKS" -eq 0 ]]; then
   ./gradlew clean test integrationTest ktlintCheck shadowJar --no-daemon
 fi
 
-git add gradle.properties BappManifest.bmf skills/SKILL.md
+git add gradle.properties BappManifest.bmf SKILL.md
 git commit -m "release: ${TAG}"
 git tag -a "$TAG" -m "Release ${TAG}"
 

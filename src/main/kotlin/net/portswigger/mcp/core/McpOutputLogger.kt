@@ -11,6 +11,8 @@ import kotlinx.serialization.json.buildJsonObject
 import java.util.concurrent.atomic.AtomicReference
 
 object McpOutputLogger {
+    const val DEBUG_LOGGING_PROPERTY = "awesome.mcp.debug"
+
     private data class Sink(
         val output: (String) -> Unit = {},
         val debugEvent: (String) -> Unit = {},
@@ -199,8 +201,13 @@ object McpOutputLogger {
     }
 }
 
-@Suppress("KotlinConstantConditions")
-private fun defaultDebugLoggingEnabled(): Boolean = BuildFlags.DEBUG_BUILD
+private fun defaultDebugLoggingEnabled(): Boolean {
+    val override = System.getProperty(McpOutputLogger.DEBUG_LOGGING_PROPERTY)
+    if (override != null) {
+        return override.equals("true", ignoreCase = true)
+    }
+    return BuildFlags.debugBuildEnabled()
+}
 
 private fun String?.normalizeKey(): String {
     if (this == null) return ""

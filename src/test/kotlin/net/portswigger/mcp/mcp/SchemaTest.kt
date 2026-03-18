@@ -35,6 +35,8 @@ class SchemaTest {
         val properties = schema.properties as JsonObject
         assertTrue(!properties.containsKey("in_scope_only"))
         assertTrue(!properties.containsKey("force_refresh"))
+        assertTrue(properties.containsKey("fields"))
+        assertTrue(properties.containsKey("exclude_fields"))
     }
 
     @Test
@@ -112,12 +114,11 @@ class SchemaTest {
 
         val serialization = properties["serialization"] as JsonObject
         val serializationDefault = serialization["default"] as JsonObject
-        assertEquals(JsonPrimitive(true), serializationDefault["include_headers"])
-        assertEquals(JsonPrimitive(true), serializationDefault["include_request_body"])
-        assertEquals(JsonPrimitive(true), serializationDefault["include_response_body"])
-        assertEquals(JsonPrimitive(false), serializationDefault["include_raw_request"])
-        assertEquals(JsonPrimitive(false), serializationDefault["include_raw_response"])
+        assertNull(serializationDefault["include_headers"])
+        assertNull(serializationDefault["include_request_body"])
+        assertNull(serializationDefault["include_response_body"])
         assertEquals(JsonPrimitive(false), serializationDefault["include_binary"])
+        assertEquals(JsonNull, serializationDefault["regex_excerpt"])
         assertEquals(JsonPrimitive(1024), serializationDefault["max_text_body_chars"])
         assertEquals(JsonPrimitive("omit"), serializationDefault["text_overflow_mode"])
         assertEquals(JsonPrimitive(65_536), serializationDefault["max_binary_body_bytes"])
@@ -126,11 +127,18 @@ class SchemaTest {
         val maxText = serializationProperties["max_text_body_chars"] as JsonObject
         val maxBinary = serializationProperties["max_binary_body_bytes"] as JsonObject
         val overflowMode = serializationProperties["text_overflow_mode"] as JsonObject
+        val regexExcerpt = serializationProperties["regex_excerpt"] as JsonObject
+        assertNull(serializationProperties["include_headers"])
+        assertNull(serializationProperties["include_request_body"])
+        assertNull(serializationProperties["include_response_body"])
         assertEquals(JsonPrimitive(1024), maxText["default"])
         assertEquals(JsonPrimitive(65_536), maxBinary["default"])
         assertEquals(JsonPrimitive("omit"), overflowMode["default"])
+        assertEquals(JsonNull, regexExcerpt["default"])
         assertEquals(JsonPrimitive(0), (properties["start_id"] as JsonObject)["default"])
         assertEquals(JsonPrimitive("increasing"), (properties["id_direction"] as JsonObject)["default"])
+        assertEquals(JsonNull, (properties["fields"] as JsonObject)["default"])
+        assertEquals(JsonNull, (properties["exclude_fields"] as JsonObject)["default"])
     }
 
     @Test
@@ -140,19 +148,19 @@ class SchemaTest {
 
         assertEquals(JsonPrimitive(20), (properties["limit"] as JsonObject)["default"])
         assertEquals(JsonPrimitive(0), (properties["offset"] as JsonObject)["default"])
-        assertEquals(JsonPrimitive(false), (properties["include_request_response"] as JsonObject)["default"])
         assertEquals(JsonPrimitive(3), (properties["max_request_responses"] as JsonObject)["default"])
         assertTrue(properties.containsKey("severity"))
         assertTrue(properties.containsKey("confidence"))
         assertTrue(properties.containsKey("serialization"))
+        assertEquals(JsonNull, (properties["fields"] as JsonObject)["default"])
+        assertEquals(JsonNull, (properties["exclude_fields"] as JsonObject)["default"])
 
         val serialization = properties["serialization"] as JsonObject
         val serializationDefault = serialization["default"] as JsonObject
-        assertEquals(JsonPrimitive(false), serializationDefault["include_request_body"])
-        assertEquals(JsonPrimitive(false), serializationDefault["include_response_body"])
+        assertEquals(JsonPrimitive(false), serializationDefault["include_binary"])
         val serializationProperties = serialization["properties"] as JsonObject
-        assertEquals(JsonPrimitive(false), (serializationProperties["include_request_body"] as JsonObject)["default"])
-        assertEquals(JsonPrimitive(false), (serializationProperties["include_response_body"] as JsonObject)["default"])
+        assertNull(serializationProperties["include_request_body"])
+        assertNull(serializationProperties["include_response_body"])
     }
 
     @Test
@@ -197,6 +205,8 @@ class SchemaTest {
         assertTrue(statusAnyOf.none { (it as JsonObject)["type"] == JsonPrimitive("string") })
         assertEquals(JsonPrimitive(0), (properties["start_id"] as JsonObject)["default"])
         assertEquals(JsonPrimitive("increasing"), (properties["id_direction"] as JsonObject)["default"])
+        assertEquals(JsonNull, (properties["fields"] as JsonObject)["default"])
+        assertEquals(JsonNull, (properties["exclude_fields"] as JsonObject)["default"])
     }
 
     @Test
@@ -260,6 +270,8 @@ class SchemaTest {
         val siteMapProperties = siteMapSchema.properties as JsonObject
         assertTrue(siteMapProperties.containsKey("start_after_key"))
         assertEquals(JsonNull, (siteMapProperties["start_after_key"] as JsonObject)["default"])
+        assertEquals(JsonNull, (siteMapProperties["fields"] as JsonObject)["default"])
+        assertEquals(JsonNull, (siteMapProperties["exclude_fields"] as JsonObject)["default"])
         val siteMapFilterSchema = ((siteMapSchema.properties as JsonObject)["filter"] as JsonObject)
         val siteMapFilterProperties = siteMapFilterSchema["properties"] as JsonObject
         val siteMapFilter = siteMapFilterSchema["default"] as JsonObject
@@ -275,6 +287,17 @@ class SchemaTest {
         assertEquals(JsonNull, siteMapFilter["time_to"])
         assertTrue(!siteMapFilterProperties.containsKey("listener_ports"))
         assertTrue(!siteMapFilter.containsKey("listener_ports"))
+    }
+
+    @Test
+    fun `projection schema hints should describe fields contract`() {
+        val historySchema = asInputSchema(QueryProxyHttpHistoryInput.serializer())
+        val historyProperties = historySchema.properties as JsonObject
+        val fields = historyProperties["fields"] as JsonObject
+        val excludeFields = historyProperties["exclude_fields"] as JsonObject
+        assertTrue((fields["description"] as JsonPrimitive).content.contains("Only one of fields or exclude_fields may be non-null"))
+        assertTrue((fields["description"] as JsonPrimitive).content.contains("request.method"))
+        assertTrue((excludeFields["description"] as JsonPrimitive).content.contains("request.method"))
     }
 
     @Test

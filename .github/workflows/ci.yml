@@ -42,7 +42,7 @@ jobs:
       - name: Verify release-critical files
         run: |
           test -f build/libs/burp-awesome-mcp.jar
-          test -f skills/SKILL.md
+          test -f SKILL.md
           test -f AGENTS.md
           test -f BappManifest.bmf
           test -f BappDescription.html
@@ -55,7 +55,7 @@ jobs:
           if-no-files-found: error
           path: |
             build/libs/burp-awesome-mcp.jar
-            skills/SKILL.md
+            SKILL.md
             AGENTS.md
             BappManifest.bmf
             BappDescription.html

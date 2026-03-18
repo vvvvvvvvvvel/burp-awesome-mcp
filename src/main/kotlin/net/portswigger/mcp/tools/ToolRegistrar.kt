@@ -39,9 +39,11 @@ import net.portswigger.mcp.history.GetProxyHttpHistoryItemsInput
 import net.portswigger.mcp.history.GetProxyWebSocketMessagesInput
 import net.portswigger.mcp.history.GetSiteMapItemsInput
 import net.portswigger.mcp.history.HistoryQueryService
+import net.portswigger.mcp.history.ProjectedHttpSerializationOptionsInput
 import net.portswigger.mcp.history.QueryProxyHttpHistoryInput
 import net.portswigger.mcp.history.QueryProxyWebSocketHistoryInput
 import net.portswigger.mcp.history.QuerySiteMapInput
+import net.portswigger.mcp.history.buildHttpMatchContext
 import net.portswigger.mcp.history.collectFilteredPage
 import net.portswigger.mcp.history.compileOptionalPattern
 import net.portswigger.mcp.history.compileRequestResponseFilter
@@ -49,8 +51,12 @@ import net.portswigger.mcp.history.findStartIndexById
 import net.portswigger.mcp.history.isLikelyBinaryPayload
 import net.portswigger.mcp.history.matchesRequestResponseFilter
 import net.portswigger.mcp.history.normalized
+import net.portswigger.mcp.history.resolveListToolRegexControls
+import net.portswigger.mcp.history.resolveProjectedHttpMaterialization
+import net.portswigger.mcp.history.resolveRegexExcerptConfig
 import net.portswigger.mcp.history.serializeHttpRequest
 import net.portswigger.mcp.history.serializeHttpResponse
+import net.portswigger.mcp.history.validateRegexExcerptProjection
 import net.portswigger.mcp.mcp.registerNoInputTool
 import net.portswigger.mcp.mcp.registerTool
 import java.awt.KeyboardFocusManager
@@ -82,17 +88,38 @@ fun Server.registerBurpTools(api: MontoyaApi) {
         name = "list_proxy_http_history",
         description =
             "List Proxy HTTP history with inclusive start_id cursor pagination, id_direction traversal, " +
-                "structured filter, and serialization output controls.",
+                "structured filter, serialization output controls, and optional item field projection.",
     ) {
-        encodeQueryResultWithNext(history.queryHttpHistory(this))
+        val projection = toFieldProjection()
+        val regexControls = resolveListToolRegexControls(filter.regex, serialization)
+        validateRegexExcerptProjection(regexControls.excerptConfig, projection)
+        val serializationOptions =
+            resolveProjectedSerializationOptions(
+                serialization,
+                projection,
+                regexExcerptEnabled = regexControls.excerptConfig != null,
+            )
+        encodeQueryResultWithNext(
+            history.queryHttpHistory(this, serializationOptions, regexControls.excerptConfig),
+            projection,
+        )
     }
 
     registerTool<GetProxyHttpHistoryItemsInput>(
         name = "get_proxy_http_history_by_ids",
-        description = "Fetch exact Proxy HTTP history entries by Burp IDs.",
+        description = "Fetch exact Proxy HTTP history entries by Burp IDs with optional item field projection.",
     ) {
         require(ids.isNotEmpty()) { "ids must not be empty" }
-        json.encodeToString(history.getHttpHistoryItems(this))
+        val projection = toFieldProjection()
+        val regexExcerpt = resolveRegexExcerptConfig(serialization)
+        validateRegexExcerptProjection(regexExcerpt, projection)
+        val serializationOptions =
+            resolveProjectedSerializationOptions(
+                serialization,
+                projection,
+                regexExcerptEnabled = regexExcerpt != null,
+            )
+        encodeWithItemFieldProjection(history.getHttpHistoryItems(this, serializationOptions, regexExcerpt), projection)
     }
 
     registerTool<QueryProxyWebSocketHistoryInput>(
@@ -116,18 +143,36 @@ fun Server.registerBurpTools(api: MontoyaApi) {
         name = "list_site_map",
         description =
             "List Site Map entries using start_after_key cursor pagination, structured filter, " +
-                "and request/response serialization output controls.",
+                "request/response serialization output controls, and optional item field projection.",
     ) {
-        encodeQueryResultWithNext(history.querySiteMap(this))
+        val projection = toFieldProjection()
+        val regexControls = resolveListToolRegexControls(filter.regex, serialization)
+        validateRegexExcerptProjection(regexControls.excerptConfig, projection)
+        val serializationOptions =
+            resolveProjectedSerializationOptions(
+                serialization,
+                projection,
+                regexExcerptEnabled = regexControls.excerptConfig != null,
+            )
+        encodeQueryResultWithNext(history.querySiteMap(this, serializationOptions, regexControls.excerptConfig), projection)
     }
 
     registerTool<GetSiteMapItemsInput>(
         name = "get_site_map_by_keys",
         description =
-            "Fetch exact Site Map entries by keys returned in list_site_map.results[].key.",
+            "Fetch exact Site Map entries by keys returned in list_site_map.results[].key with optional item field projection.",
     ) {
         require(keys.isNotEmpty()) { "keys must not be empty" }
-        json.encodeToString(history.getSiteMapItems(this))
+        val projection = toFieldProjection()
+        val regexExcerpt = resolveRegexExcerptConfig(serialization)
+        validateRegexExcerptProjection(regexExcerpt, projection)
+        val serializationOptions =
+            resolveProjectedSerializationOptions(
+                serialization,
+                projection,
+                regexExcerptEnabled = regexExcerpt != null,
+            )
+        encodeWithItemFieldProjection(history.getSiteMapItems(this, serializationOptions, regexExcerpt), projection)
     }
 
     registerTool<ExtractCookiesFromHistoryInput>(
@@ -147,10 +192,19 @@ fun Server.registerBurpTools(api: MontoyaApi) {
     registerTool<SendHttp1RequestInput>(
         name = "send_http1_requests",
         description =
-            "Send one or many HTTP/1.1 requests with optional parallel execution, request options, and response serialization controls.",
+            "Send one or many HTTP/1.1 requests with optional parallel execution, request options, " +
+                "response serialization controls, and optional result field projection.",
     ) {
         require(items.isNotEmpty()) { "items must not be empty" }
-        val serializationOptions = toHttpSerializationOptions()
+        val projection = toFieldProjection()
+        val regexExcerpt = resolveRegexExcerptConfig(serialization)
+        validateRegexExcerptProjection(regexExcerpt, projection)
+        val serializationOptions =
+            resolveProjectedSerializationOptions(
+                serialization,
+                projection,
+                regexExcerptEnabled = regexExcerpt != null,
+            )
 
         val results =
             runBlocking {
@@ -162,25 +216,34 @@ fun Server.registerBurpTools(api: MontoyaApi) {
                                 item.content,
                             )
                         val response = sendRequestWithOptions(api, request, requestOptions)
-                        sentRequestResult(request, response?.response(), serializationOptions)
+                        sentRequestResult(request, response?.response(), serializationOptions, regexExcerpt)
                     } catch (e: Exception) {
                         BulkToolItemResult(ok = false, error = e.message ?: "request failed")
                     }
                 }
             }
 
-        json.encodeToString(BulkToolResponse(results))
+        encodeWithBulkResultFieldProjection(BulkToolResponse(results), projection)
     }
 
     registerTool<SendHttp2RequestInput>(
         name = "send_http2_requests",
         description =
-            "Send one or many HTTP/2 requests with optional parallel execution, request options, and response serialization controls. " +
+            "Send one or many HTTP/2 requests with optional parallel execution, request options, " +
+                "response serialization controls, and optional result field projection. " +
                 "request_options.http_mode must be http_2 or http_2_ignore_alpn (or omitted). " +
                 "Use headers_list to preserve duplicate header names.",
     ) {
         require(items.isNotEmpty()) { "items must not be empty" }
-        val serializationOptions = toHttpSerializationOptions()
+        val projection = toFieldProjection()
+        val regexExcerpt = resolveRegexExcerptConfig(serialization)
+        validateRegexExcerptProjection(regexExcerpt, projection)
+        val serializationOptions =
+            resolveProjectedSerializationOptions(
+                serialization,
+                projection,
+                regexExcerptEnabled = regexExcerpt != null,
+            )
 
         val results =
             runBlocking {
@@ -224,14 +287,14 @@ fun Server.registerBurpTools(api: MontoyaApi) {
                             )
 
                         val response = sendRequestWithOptions(api, request, effectiveOptions)
-                        sentRequestResult(request, response?.response(), serializationOptions)
+                        sentRequestResult(request, response?.response(), serializationOptions, regexExcerpt)
                     } catch (e: Exception) {
                         BulkToolItemResult(ok = false, error = e.message ?: "request failed")
                     }
                 }
             }
 
-        json.encodeToString(BulkToolResponse(results))
+        encodeWithBulkResultFieldProjection(BulkToolResponse(results), projection)
     }
 
     registerTool<CreateRepeaterTabInput>(
@@ -338,12 +401,20 @@ fun Server.registerBurpTools(api: MontoyaApi) {
         name = "list_organizer_items",
         description =
             "List Organizer items with inclusive start_id cursor pagination, id_direction traversal, optional status filters, " +
-                "and request/response serialization output controls.",
+                "request/response serialization output controls, and optional item field projection.",
     ) {
+        val projection = toFieldProjection()
         val normalizedLimit = limit.coerceIn(1, 500)
-        val options = serialization.normalized()
+        val regexControls = resolveListToolRegexControls(filter.regex, serialization)
+        validateRegexExcerptProjection(regexControls.excerptConfig, projection)
+        val options =
+            resolveProjectedSerializationOptions(
+                serialization,
+                projection,
+                regexExcerptEnabled = regexControls.excerptConfig != null,
+            )
 
-        val regexPattern = compileOptionalPattern(filter.regex, "filter.regex")
+        val regexPattern = regexControls.filterPattern
         val statusSet = status?.map { it.name }?.toSet()
         val rrFilter = compileRequestResponseFilter(filter)
 
@@ -363,7 +434,7 @@ fun Server.registerBurpTools(api: MontoyaApi) {
                 matchesRequestResponseFilter(item, rrFilter)
             }
 
-        val mapped = selected.items.map { organizerItemToSummary(it, options) }
+        val mapped = selected.items.map { organizerItemToSummary(it, options, regexControls.excerptConfig) }
         val next = selected.nextItem?.let { copy(startId = it.id()) }
         encodeQueryResultWithNext(
             QueryOrganizerItemsResult(
@@ -371,15 +442,17 @@ fun Server.registerBurpTools(api: MontoyaApi) {
                 next = next,
                 results = mapped,
             ),
+            projection,
         )
     }
 
     registerTool<GetOrganizerItemsInput>(
         name = "get_organizer_items_by_ids",
-        description = "Fetch exact Organizer entries by Organizer IDs.",
+        description = "Fetch exact Organizer entries by Organizer IDs with optional item field projection.",
     ) {
         require(ids.isNotEmpty()) { "ids must not be empty" }
-        val options = serialization.normalized()
+        val projection = toFieldProjection()
+        val options = resolveProjectedSerializationOptions(serialization, projection)
         val byId = api.organizer().items().associateBy { it.id() }
         val results =
             ids.map { id ->
@@ -390,12 +463,13 @@ fun Server.registerBurpTools(api: MontoyaApi) {
                     OrganizerLookupItem(id = id, item = organizerItemToSummary(item, options))
                 }
             }
-        json.encodeToString(
+        encodeWithItemFieldProjection(
             GetOrganizerItemsResult(
                 requested = ids.size,
                 found = results.count { it.item != null },
                 results = results,
             ),
+            projection,
         )
     }
 
@@ -765,7 +839,8 @@ fun Server.registerBurpTools(api: MontoyaApi) {
     registerTool<QueryScannerIssuesInput>(
         name = "list_scanner_issues",
         description =
-            "List Burp scanner issues with pagination, filters, and optional detail/remediation/request-response context " +
+            "List Burp scanner issues with pagination, filters, optional projected context, " +
+                "and optional item field projection " +
                 "(Professional edition only).",
     ) {
         require(api.burpSuite().version().edition() == BurpSuiteEdition.PROFESSIONAL) {
@@ -775,7 +850,9 @@ fun Server.registerBurpTools(api: MontoyaApi) {
         val normalizedLimit = limit.coerceIn(1, 500)
         val normalizedOffset = offset.coerceAtLeast(0)
         val normalizedMaxRequestResponses = maxRequestResponses.coerceIn(0, 20)
-        val options = serialization.normalized()
+        val projection = toFieldProjection()
+        val materialization = resolveScannerIssueMaterialization(projection)
+        val options = serialization.normalized(materialization.requestResponseHttp)
         val selectors = buildScannerIssueSelectors(api, nameRegex, urlRegex, severity, confidence)
         val selected = mutableListOf<AuditIssue>()
         val matched =
@@ -805,46 +882,10 @@ fun Server.registerBurpTools(api: MontoyaApi) {
             }
         val mapped =
             selected.map { issue ->
-                val definition = runCatching { issue.definition() }.getOrNull()
-                val requestResponses =
-                    if (includeRequestResponse && normalizedMaxRequestResponses > 0) {
-                        issue
-                            .requestResponses()
-                            .take(normalizedMaxRequestResponses)
-                            .map { rr ->
-                                ScannerIssueRequestResponse(
-                                    request = serializeHttpRequest(rr.request(), options),
-                                    response =
-                                        runCatching {
-                                            if (rr.hasResponse()) serializeHttpResponse(rr.response(), options) else null
-                                        }.getOrNull(),
-                                )
-                            }
-                    } else {
-                        null
-                    }
-
-                ScannerIssueSummary(
-                    name = issue.name() ?: "",
-                    severity = scannerSeverityToWire(issue.severity().name),
-                    confidence = scannerConfidenceToWire(issue.confidence().name),
-                    baseUrl = issue.baseUrl(),
-                    detail = if (includeDetail) nonBlankValueOrNull { issue.detail() } else null,
-                    remediation = if (includeRemediation) nonBlankValueOrNull { issue.remediation() } else null,
-                    issueBackground = if (includeDefinition) nonBlankValueOrNull { definition?.background() } else null,
-                    remediationBackground = if (includeDefinition) nonBlankValueOrNull { definition?.remediation() } else null,
-                    typicalSeverity =
-                        definition
-                            ?.typicalSeverity()
-                            ?.name
-                            ?.takeIf { includeDefinition }
-                            ?.let(::scannerSeverityToWire),
-                    typeIndex = definition?.typeIndex()?.takeIf { includeDefinition },
-                    requestResponses = requestResponses,
-                )
+                mapScannerIssueSummary(issue, materialization, options, normalizedMaxRequestResponses)
             }
 
-        json.encodeToString(
+        encodeWithItemFieldProjection(
             QueryScannerIssuesResult(
                 total = matched,
                 returned = mapped.size,
@@ -853,6 +894,7 @@ fun Server.registerBurpTools(api: MontoyaApi) {
                 hasMore = normalizedOffset + mapped.size < matched,
                 results = mapped,
             ),
+            projection,
         )
     }
 
@@ -911,9 +953,76 @@ private fun nonBlankValueOrNull(block: () -> String?): String? =
         .getOrNull()
         ?.takeIf { it.isNotBlank() }
 
-private fun SendHttp1RequestInput.toHttpSerializationOptions() = serialization.normalized()
+private fun <T> whenMaterialized(
+    enabled: Boolean,
+    block: () -> T?,
+): T? = if (enabled) block() else null
 
-private fun SendHttp2RequestInput.toHttpSerializationOptions() = serialization.normalized()
+private fun nonBlankWhenMaterialized(
+    enabled: Boolean,
+    block: () -> String?,
+): String? = whenMaterialized(enabled) { nonBlankValueOrNull(block) }
+
+private fun mapScannerIssueSummary(
+    issue: AuditIssue,
+    materialization: ScannerIssueMaterialization,
+    options: net.portswigger.mcp.history.HttpSerializationOptions,
+    maxRequestResponses: Int,
+): ScannerIssueSummary {
+    val definition = whenMaterialized(materialization.includeDefinition) { runCatching { issue.definition() }.getOrNull() }
+
+    return ScannerIssueSummary(
+        name = issue.name() ?: "",
+        severity = scannerSeverityToWire(issue.severity().name),
+        confidence = scannerConfidenceToWire(issue.confidence().name),
+        baseUrl = issue.baseUrl(),
+        detail = nonBlankWhenMaterialized(materialization.includeDetail) { issue.detail() },
+        remediation = nonBlankWhenMaterialized(materialization.includeRemediation) { issue.remediation() },
+        issueBackground = nonBlankWhenMaterialized(definition != null) { definition?.background() },
+        remediationBackground = nonBlankWhenMaterialized(definition != null) { definition?.remediation() },
+        typicalSeverity = definition?.typicalSeverity()?.name?.let(::scannerSeverityToWire),
+        typeIndex = definition?.typeIndex(),
+        requestResponses = materializeScannerIssueRequestResponses(issue, materialization, options, maxRequestResponses),
+    )
+}
+
+private fun materializeScannerIssueRequestResponses(
+    issue: AuditIssue,
+    materialization: ScannerIssueMaterialization,
+    options: net.portswigger.mcp.history.HttpSerializationOptions,
+    maxRequestResponses: Int,
+): List<ScannerIssueRequestResponse>? {
+    if (!materialization.includeRequestResponses || maxRequestResponses <= 0) {
+        return null
+    }
+
+    return issue.requestResponses().take(maxRequestResponses).map { requestResponse ->
+        ScannerIssueRequestResponse(
+            request = serializeHttpRequest(requestResponse.request(), options),
+            response =
+                runCatching {
+                    if (requestResponse.hasResponse()) {
+                        serializeHttpResponse(requestResponse.response(), options)
+                    } else {
+                        null
+                    }
+                }.getOrNull(),
+        )
+    }
+}
+
+private fun resolveProjectedSerializationOptions(
+    serialization: ProjectedHttpSerializationOptionsInput,
+    projection: FieldProjection?,
+    regexExcerptEnabled: Boolean = false,
+): net.portswigger.mcp.history.HttpSerializationOptions =
+    serialization.normalized(
+        resolveProjectedHttpMaterialization(
+            projection?.fields,
+            projection?.excludeFields,
+            regexExcerptEnabled = regexExcerptEnabled,
+        ),
+    )
 
 private fun sendRequestWithOptions(
     api: MontoyaApi,
@@ -935,6 +1044,7 @@ private fun sentRequestResult(
     request: HttpRequest,
     responseMessage: HttpResponse?,
     serializationOptions: net.portswigger.mcp.history.HttpSerializationOptions,
+    regexExcerpt: net.portswigger.mcp.history.RegexExcerptConfig? = null,
 ): BulkToolItemResult {
     val summary =
         SentRequestSummary(
@@ -942,6 +1052,7 @@ private fun sentRequestResult(
             hasResponse = responseMessage != null,
             request = serializeHttpRequest(request, serializationOptions),
             response = responseMessage?.let { serializeHttpResponse(it, serializationOptions) },
+            matchContext = regexExcerpt?.let { buildHttpMatchContext(request, responseMessage, notes = null, it) },
         )
     return BulkToolItemResult(ok = true, result = json.parseToJsonElement(json.encodeToString(summary)))
 }
@@ -1323,11 +1434,17 @@ private fun isTargetInScope(
     api: MontoyaApi,
     target: ScopeTarget,
 ): Boolean {
-    val direct = runCatching { api.scope().isInScope(target.rulePrefix) }
-    if (direct.getOrDefault(false)) {
-        return true
+    target.normalizedUrl?.let { normalizedUrl ->
+        if (runCatching { api.scope().isInScope(normalizedUrl) }.getOrDefault(false)) {
+            return true
+        }
     }
-    return target.normalizedUrl?.let { runCatching { api.scope().isInScope(it) }.getOrDefault(false) } ?: false
+
+    if (!target.rulePrefix.contains("://")) {
+        return false
+    }
+
+    return runCatching { api.scope().isInScope(target.rulePrefix) }.getOrDefault(false)
 }
 
 private fun extractHostCandidate(prefix: String): String? {
@@ -1351,20 +1468,26 @@ private fun String.normalizeScopePrefix(): String = trim().lowercase().removePre
 private fun organizerItemToSummary(
     item: OrganizerItem,
     options: net.portswigger.mcp.history.HttpSerializationOptions,
+    regexExcerpt: net.portswigger.mcp.history.RegexExcerptConfig? = null,
 ): OrganizerItemSummary {
     val response = runCatching { if (item.hasResponse()) item.response() else null }.getOrNull()
+    val notes = runCatching { item.annotations().notes() }.getOrNull()?.takeIf { it.isNotBlank() }
     return OrganizerItemSummary(
         id = item.id(),
         status = item.status().name.lowercase(),
         url = item.request().url(),
         inScope = item.request().isInScope(),
-        notes = runCatching { item.annotations().notes() }.getOrNull()?.takeIf { it.isNotBlank() },
+        notes = notes,
         request = serializeHttpRequest(item.request(), options),
         response = response?.let { serializeHttpResponse(it, options) },
+        matchContext = regexExcerpt?.let { buildHttpMatchContext(item.request(), response, notes, it) },
     )
 }
 
-private inline fun <reified T> encodeQueryResultWithNext(result: T): String {
+private inline fun <reified T> encodeQueryResultWithNext(
+    result: T,
+    projection: FieldProjection? = null,
+): String {
     val payload = json.parseToJsonElement(json.encodeToString(result))
     if (payload !is JsonObject) {
         return json.encodeToString(result)
@@ -1375,7 +1498,8 @@ private inline fun <reified T> encodeQueryResultWithNext(result: T): String {
         } else {
             JsonObject(payload + ("next" to JsonNull))
         }
-    return plainJson.encodeToString(JsonElement.serializer(), withNext)
+    val projected = applyItemFieldProjection(withNext, projection)
+    return plainJson.encodeToString(JsonElement.serializer(), projected)
 }
 
 private fun scannerIssueMatches(

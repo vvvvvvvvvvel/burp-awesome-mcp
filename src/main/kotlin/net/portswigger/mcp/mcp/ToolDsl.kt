@@ -135,6 +135,8 @@ private val SCALAR_TO_ARRAY_FIELDS =
         "keys",
         "seed_urls",
         "urls",
+        "fields",
+        "exclude_fields",
     )
 
 private val CSV_STRING_TO_ARRAY_FIELDS =
@@ -150,17 +152,14 @@ private val CSV_STRING_TO_ARRAY_FIELDS =
         "confidence",
         "status",
         "ids",
+        "fields",
+        "exclude_fields",
     )
 
 private val STRING_BOOLEAN_FIELDS =
     setOf(
         "in_scope_only",
         "has_response",
-        "include_headers",
-        "include_request_body",
-        "include_response_body",
-        "include_raw_request",
-        "include_raw_response",
         "include_binary",
         "include_edited_payload",
         "parallel",
@@ -170,22 +169,62 @@ private val STRING_BOOLEAN_FIELDS =
         "include_expired",
         "include_subdomains",
         "force_refresh",
-        "include_detail",
-        "include_remediation",
-        "include_definition",
-        "include_request_response",
         "headless",
         "active_tests",
     )
 
+private val STRING_INTEGER_FIELDS =
+    setOf(
+        "target_port",
+        "parallel_rps",
+        "start",
+        "end",
+        "length",
+        "limit",
+        "offset",
+        "max_request_responses",
+        "max_value_chars",
+        "start_id",
+        "max_text_body_chars",
+        "max_request_body_chars",
+        "max_response_body_chars",
+        "max_binary_body_bytes",
+        "max_text_payload_chars",
+        "max_binary_payload_bytes",
+        "context_chars",
+        "listener_ports",
+        "status_codes",
+        "web_socket_ids",
+        "ids",
+        "pageno",
+    )
+
+private val STRING_LONG_FIELDS =
+    setOf(
+        "response_timeout_ms",
+    )
+
+private val JSON_OBJECT_STRING_FIELDS =
+    setOf(
+        "filter",
+        "serialization",
+        "request_options",
+        "regex_excerpt",
+        "headers",
+        "pseudo_headers",
+    )
+
 internal fun JsonObject.normalizeAgentInput(): JsonObject = normalizeJsonElement(this) as JsonObject
 
-private fun normalizeJsonElement(element: JsonElement): JsonElement =
+private fun normalizeJsonElement(
+    element: JsonElement,
+    key: String? = null,
+): JsonElement =
     when (element) {
         is JsonObject -> {
-            val normalized =
+            var normalized =
                 element.entries.associate { (key, value) ->
-                    val normalizedValue = normalizeJsonElement(value)
+                    val normalizedValue = normalizeJsonElement(value, key)
                     val coercedArray =
                         if (
                             key in SCALAR_TO_ARRAY_FIELDS &&
@@ -196,13 +235,16 @@ private fun normalizeJsonElement(element: JsonElement): JsonElement =
                         } else {
                             normalizedValue
                         }
-                    key to coerceBooleanString(key, coercedArray)
+                    key to coerceNumericString(key, coerceBooleanString(key, coercedArray))
                 }
+            if (key == "request_options") {
+                normalized = normalizeRequestOptionsAliases(normalized)
+            }
             JsonObject(normalized)
         }
 
-        is JsonArray -> JsonArray(element.map(::normalizeJsonElement))
-        else -> element
+        is JsonArray -> JsonArray(element.map { normalizeJsonElement(it, key) })
+        is JsonPrimitive -> parseJsonObjectString(key, element)?.let { normalizeJsonElement(it, key) } ?: element
     }
 
 private fun coerceScalarToArray(
@@ -234,6 +276,60 @@ private fun coerceBooleanString(
         "true", "yes", "1", "on" -> JsonPrimitive(true)
         "false", "no", "0", "off" -> JsonPrimitive(false)
         else -> value
+    }
+}
+
+private fun coerceNumericString(
+    key: String,
+    value: JsonElement,
+): JsonElement =
+    when (value) {
+        is JsonArray -> JsonArray(value.map { coerceNumericString(key, it) })
+        is JsonPrimitive -> {
+            val content = value.contentOrNull ?: return value
+            when {
+                key in STRING_INTEGER_FIELDS && INTEGER_STRING_REGEX.matches(content) -> JsonPrimitive(content.toInt())
+                key in STRING_LONG_FIELDS && LONG_STRING_REGEX.matches(content) -> JsonPrimitive(content.toLong())
+                else -> value
+            }
+        }
+        is JsonObject -> value
+    }
+
+private val INTEGER_STRING_REGEX = Regex("-?\\d+")
+private val LONG_STRING_REGEX = Regex("-?\\d+")
+
+private fun parseJsonObjectString(
+    key: String?,
+    value: JsonPrimitive,
+): JsonObject? {
+    if (key !in JSON_OBJECT_STRING_FIELDS) return null
+    val content = value.contentOrNull?.trim() ?: return null
+    if (!content.startsWith("{")) return null
+    return runCatching { toolJson.parseToJsonElement(content) as? JsonObject }.getOrNull()
+}
+
+private fun normalizeRequestOptionsAliases(properties: Map<String, JsonElement>): Map<String, JsonElement> {
+    val followRedirects = properties["follow_redirects"]?.let(::coerceFollowRedirects)
+    if (followRedirects == null) {
+        return properties
+    }
+
+    val updated = properties.toMutableMap()
+    if (!updated.containsKey("redirection_mode")) {
+        updated["redirection_mode"] = JsonPrimitive(if (followRedirects) "always" else "never")
+    }
+    updated.remove("follow_redirects")
+    return updated
+}
+
+private fun coerceFollowRedirects(value: JsonElement): Boolean? {
+    val primitive = value as? JsonPrimitive ?: return null
+    primitive.booleanOrNull?.let { return it }
+    return when (primitive.contentOrNull?.trim()?.lowercase()) {
+        "true", "yes", "1", "on" -> true
+        "false", "no", "0", "off" -> false
+        else -> null
     }
 }
 
