@@ -7,7 +7,7 @@ description: >-
   scanner/collaborator flows, and cookie jar operations.
 metadata:
   author: vvvvvvvvvvel
-  version: "1.1.0"
+  version: "1.1.1"
 ---
 
 # Awesome MCP Burp Operations
