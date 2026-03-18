@@ -3,7 +3,7 @@ ExtensionType: 1
 Name: Awesome MCP
 RepoName: burp-awesome-mcp
 ScreenVersion: 1.1.0
-SerialVersion: 12
+SerialVersion: 13
 MinPlatformVersion: 2
 ProOnly: False
 Author: vvvvvvvvvvel
