@@ -157,6 +157,7 @@ Serialization options shape output size; they do not filter dataset membership.
   - `context_chars` controls left/right snippet width around each match.
   - `regex` is the excerpt pattern.
 - `serialization.regex_excerpt` must be an object, not a bare regex string.
+- correct example: `"regex_excerpt": {"regex": "refresh_token", "context_chars": 10}`
 - `match_context` is available when `serialization.regex_excerpt` is enabled.
 - `serialization.regex_excerpt` is supported on:
   - `list_proxy_http_history`
@@ -168,6 +169,8 @@ Serialization options shape output size; they do not filter dataset membership.
   - `send_http2_requests`
 - When `serialization.regex_excerpt` is enabled:
   - do not request `request.body`, `response.body`, `request.raw`, or `response.raw` in `fields`
+  - use `match_context` for matched snippets; do not combine snippet mode with full body branches in the same call
+  - if the goal is to return only what matched, request `match_context` plus lightweight metadata such as `id`, `time`, `request.method`, `request.url`, or `response.status_code`
   - if `fields` is `null`, the optimized default shape is returned without body/raw branches
 
 ## Item projection strategy
@@ -440,6 +443,14 @@ Behavior:
 - `list_scanner_issues` uses offset pagination; while scans are changing, page boundaries can shift.
 - `expire_cookie_jar_cookie` is expire semantics (practical delete), not hard delete.
 - `list_cookie_jar` is not cursor-based; use `offset` / `limit`, and keep `order` to `asc` or `desc` exactly.
+- `request_options` on `send_http1_requests` / `send_http2_requests` is strict. Use only:
+  - `http_mode`
+  - `connection_id`
+  - `redirection_mode`
+  - `response_timeout_ms`
+  - `server_name_indicator`
+  - `upstream_tls_verification`
+- Do not invent extra `request_options` fields such as `cookie_jar_mode` or `timeout_seconds`.
 
 ## Recommended call patterns
 
@@ -466,10 +477,35 @@ This is the cheapest useful default:
 - no empty cookie arrays
 - no duplicate stated/inferred MIME fields when they add no signal
 
-### Pattern 2: continue page
+### Pattern 2: strict direct send with canonical request_options
+```json
+{
+  "items": [
+    {
+      "content": "GET /api/me HTTP/1.1\\r\\nHost: api.example.com\\r\\nConnection: close\\r\\n\\r\\n",
+      "target_hostname": "api.example.com",
+      "target_port": 443,
+      "uses_https": true
+    }
+  ],
+  "fields": ["status_code", "response.status_code", "response.headers", "response.body"],
+  "request_options": {
+    "redirection_mode": "never",
+    "response_timeout_ms": 15000
+  },
+  "serialization": {
+    "max_response_body_chars": 2500,
+    "text_overflow_mode": "truncate"
+  }
+}
+```
+
+Use canonical `request_options` names exactly. Do not send invented keys such as `cookie_jar_mode` or `timeout_seconds`.
+
+### Pattern 3: continue page
 - Reuse response `next` directly.
 
-### Pattern 3: deep pull by IDs
+### Pattern 4: deep pull by IDs
 ```json
 {
   "ids": [123, 140, 155],
@@ -477,7 +513,7 @@ This is the cheapest useful default:
 }
 ```
 
-### Pattern 4: compact regex triage without full bodies
+### Pattern 5: compact regex triage without full bodies
 ```json
 {
   "start_id": 0,
@@ -487,7 +523,7 @@ This is the cheapest useful default:
     "in_scope_only": true,
     "regex": "refresh_token"
   },
-  "fields": ["id", "time", "request.method", "request.url", "response.status_code"],
+  "fields": ["id", "time", "request.method", "request.url", "response.status_code", "match_context"],
   "serialization": {
     "regex_excerpt": {
       "context_chars": 10
@@ -496,7 +532,9 @@ This is the cheapest useful default:
 }
 ```
 
-### Pattern 5: split filter and excerpt regex
+Use this pattern when the goal is to inspect only the matched fragments. Do not add `request.body` or `response.body` to `fields` in the same call.
+
+### Pattern 6: split filter and excerpt regex
 ```json
 {
   "start_id": 0,
@@ -514,7 +552,7 @@ This is the cheapest useful default:
 }
 ```
 
-### Pattern 6: explicit compact discovery before exact follow-up
+### Pattern 7: explicit compact discovery before exact follow-up
 ```json
 {
   "start_id": 0,
@@ -551,7 +589,7 @@ Then follow with:
 }
 ```
 
-### Pattern 7: listener-separated traffic review
+### Pattern 8: listener-separated traffic review
 ```json
 {
   "start_id": 0,

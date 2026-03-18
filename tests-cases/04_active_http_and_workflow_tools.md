@@ -27,6 +27,7 @@
 - `response_timeout_ms` (long|null): per-request timeout.
 - `server_name_indicator` (string|null): explicit TLS SNI hostname.
 - `upstream_tls_verification` (bool, default `false`): enable/disable upstream cert verification.
+- no other keys are part of the contract; do not invent fields such as `cookie_jar_mode` or `timeout_seconds`
 
 Request options example:
 ```json
@@ -73,6 +74,7 @@ Projection notes for `send_http1_requests` / `send_http2_requests`:
 - filtering is not involved here; projection only changes returned result shape
 - when `serialization.regex_excerpt` is enabled, `match_context` becomes available as a normal optional projection branch
 - when `serialization.regex_excerpt` is enabled, `request.body`, `response.body`, `request.raw`, and `response.raw` must not be requested in `fields`
+- use `match_context` plus lightweight metadata if the goal is to inspect only matched snippets
 - the optimized default HTTP result omits `request.path`, `request.query`, `request.in_scope`, empty `response.cookies`, and duplicate stated/inferred MIME fields when they equal `response.mime_type`
 
 ### `create_repeater_tabs` / `send_requests_to_intruder`

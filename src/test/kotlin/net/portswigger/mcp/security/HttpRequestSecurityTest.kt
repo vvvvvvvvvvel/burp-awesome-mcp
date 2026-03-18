@@ -1,6 +1,7 @@
 package net.portswigger.mcp.history
 
 import burp.api.montoya.MontoyaApi
+import burp.api.montoya.burpsuite.BurpSuite
 import burp.api.montoya.core.Annotations
 import burp.api.montoya.core.ByteArray
 import burp.api.montoya.http.HttpService
@@ -390,6 +391,116 @@ class HttpRequestSecurityTest {
     }
 
     @Test
+    fun `query should fail when in scope filter has no matches and project scope is empty`() {
+        val burpSuite = mockk<BurpSuite>()
+        val all =
+            listOf(
+                mockHistoryItem(id = 1, inScope = false),
+                mockHistoryItem(id = 2, inScope = false),
+            )
+        every { proxy.history() } returns all
+        every { api.burpSuite() } returns burpSuite
+        every { burpSuite.exportProjectOptionsAsJson() } returns emptyProjectScopeJson()
+
+        val error =
+            assertThrows(IllegalArgumentException::class.java) {
+                service.queryHttpHistory(QueryProxyHttpHistoryInput())
+            }
+
+        assertEquals(EMPTY_PROJECT_SCOPE_ERROR, error.message)
+    }
+
+    @Test
+    fun `query should return empty results when in scope filter has no matches but project scope is configured`() {
+        val burpSuite = mockk<BurpSuite>()
+        val all =
+            listOf(
+                mockHistoryItem(id = 1, inScope = false),
+                mockHistoryItem(id = 2, inScope = false),
+            )
+        every { proxy.history() } returns all
+        every { api.burpSuite() } returns burpSuite
+        every { burpSuite.exportProjectOptionsAsJson() } returns configuredProjectScopeJson()
+
+        val result = service.queryHttpHistory(QueryProxyHttpHistoryInput())
+
+        assertEquals(emptyList<Int>(), result.results.map { it.id })
+    }
+
+    @Test
+    fun `query should fail when result is empty and project scope is empty even if scope filter has possible matches`() {
+        val burpSuite = mockk<BurpSuite>()
+        val all = listOf(mockHistoryItem(id = 1, inScope = true, method = "GET"))
+        every { proxy.history() } returns all
+        every { api.burpSuite() } returns burpSuite
+        every { burpSuite.exportProjectOptionsAsJson() } returns emptyProjectScopeJson()
+
+        val error =
+            assertThrows(IllegalArgumentException::class.java) {
+                service.queryHttpHistory(
+                    QueryProxyHttpHistoryInput(
+                        filter = ProxyHttpHistoryFilterInput(methods = listOf("POST")),
+                    ),
+                )
+            }
+
+        assertEquals(EMPTY_PROJECT_SCOPE_ERROR, error.message)
+    }
+
+    @Test
+    fun `query should fail when in scope filter has no matches and project scope rules are disabled`() {
+        val burpSuite = mockk<BurpSuite>()
+        val all = listOf(mockHistoryItem(id = 1, inScope = false))
+        every { proxy.history() } returns all
+        every { api.burpSuite() } returns burpSuite
+        every { burpSuite.exportProjectOptionsAsJson() } returns disabledProjectScopeJson()
+
+        val error =
+            assertThrows(IllegalArgumentException::class.java) {
+                service.queryHttpHistory(QueryProxyHttpHistoryInput())
+            }
+
+        assertEquals(EMPTY_PROJECT_SCOPE_ERROR, error.message)
+    }
+
+    @Test
+    fun `query should fail explicitly when project options json is invalid`() {
+        val burpSuite = mockk<BurpSuite>()
+        val all = listOf(mockHistoryItem(id = 1, inScope = false))
+        every { proxy.history() } returns all
+        every { api.burpSuite() } returns burpSuite
+        every { burpSuite.exportProjectOptionsAsJson() } returns "{invalid-json"
+
+        val error =
+            assertThrows(IllegalStateException::class.java) {
+                service.queryHttpHistory(QueryProxyHttpHistoryInput())
+            }
+
+        assertEquals(PROJECT_OPTIONS_PARSE_ERROR, error.message)
+    }
+
+    @Test
+    fun `query should re-read project scope between calls`() {
+        val burpSuite = mockk<BurpSuite>()
+        val all = listOf(mockHistoryItem(id = 1, inScope = false))
+        every { proxy.history() } returns all
+        every { api.burpSuite() } returns burpSuite
+        every { burpSuite.exportProjectOptionsAsJson() } returnsMany
+            listOf(configuredProjectScopeJson(), emptyProjectScopeJson())
+
+        val first = service.queryHttpHistory(QueryProxyHttpHistoryInput())
+
+        assertEquals(emptyList<Int>(), first.results.map { it.id })
+
+        val secondError =
+            assertThrows(IllegalArgumentException::class.java) {
+                service.queryHttpHistory(QueryProxyHttpHistoryInput())
+            }
+
+        assertEquals(EMPTY_PROJECT_SCOPE_ERROR, secondError.message)
+    }
+
+    @Test
     fun `query should filter proxy history by listener ports`() {
         val all =
             listOf(
@@ -573,3 +684,43 @@ class HttpRequestSecurityTest {
         return bytes
     }
 }
+
+private fun emptyProjectScopeJson(): String =
+    """
+    {
+      "target": {
+        "scope": {
+          "include": [],
+          "exclude": []
+        }
+      }
+    }
+    """.trimIndent()
+
+private fun configuredProjectScopeJson(): String =
+    """
+    {
+      "target": {
+        "scope": {
+          "include": [
+            {"enabled": true, "include_subdomains": false, "prefix": "example.com"}
+          ],
+          "exclude": []
+        }
+      }
+    }
+    """.trimIndent()
+
+private fun disabledProjectScopeJson(): String =
+    """
+    {
+      "target": {
+        "scope": {
+          "include": [
+            {"enabled": false, "include_subdomains": false, "prefix": "example.com"}
+          ],
+          "exclude": []
+        }
+      }
+    }
+    """.trimIndent()

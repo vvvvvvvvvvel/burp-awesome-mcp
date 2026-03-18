@@ -41,6 +41,12 @@ class HistoryQueryService(
                 (!filter.requestResponse.inScopeOnly || isHttpHistoryItemInScope(item)) &&
                     matchesHttpHistoryFilter(item, filter)
             }
+        if (selected.items.isEmpty()) {
+            requireConfiguredProjectScopeForInScopeOnly(
+                api = api,
+                inScopeOnly = filter.requestResponse.inScopeOnly,
+            )
+        }
 
         val hydratedSelection =
             hydratePendingHttpResponses(
@@ -123,6 +129,12 @@ class HistoryQueryService(
                 (!filter.inScopeOnly || isWebSocketItemInScope(item)) &&
                     matchesWebSocketFilter(item, filter)
             }
+        if (selected.items.isEmpty()) {
+            requireConfiguredProjectScopeForInScopeOnly(
+                api = api,
+                inScopeOnly = filter.inScopeOnly,
+            )
+        }
 
         val mapped = selected.items.map { mapWebSocketHistoryItem(it, options) }
         val next = selected.nextItem?.let { input.copy(startId = it.id()) }
@@ -167,6 +179,12 @@ class HistoryQueryService(
                 (!filter.inScopeOnly || item.request().isInScope()) &&
                     matchesRequestResponseFilter(item, filter)
             }
+        if (selected.items.isEmpty()) {
+            requireConfiguredProjectScopeForInScopeOnly(
+                api = api,
+                inScopeOnly = filter.inScopeOnly,
+            )
+        }
 
         val mapped =
             selected.items.map { item ->
@@ -248,14 +266,21 @@ class HistoryQueryService(
     }
 
     fun extractCookies(input: ExtractCookiesFromHistoryInput): ExtractCookiesFromHistoryResult {
+        val sourceEntries = fetchHttpHistory(regex = input.regex)
         val entries =
             selectPage(
-                items = fetchHttpHistory(regex = input.regex),
+                items = sourceEntries,
                 order = input.order,
                 offset = input.offset.coerceAtLeast(0),
                 limit = input.limit.coerceIn(1, 500),
                 predicate = { item -> !input.inScopeOnly || isHttpHistoryItemInScope(item) },
             ).items
+        if (entries.isEmpty()) {
+            requireConfiguredProjectScopeForInScopeOnly(
+                api = api,
+                inScopeOnly = input.inScopeOnly,
+            )
+        }
 
         data class Agg(
             val source: String,
@@ -342,14 +367,21 @@ class HistoryQueryService(
     }
 
     fun extractAuthHeaders(input: ExtractAuthHeadersFromHistoryInput): ExtractAuthHeadersFromHistoryResult {
+        val sourceEntries = fetchHttpHistory(regex = input.regex)
         val entries =
             selectPage(
-                items = fetchHttpHistory(regex = input.regex),
+                items = sourceEntries,
                 order = input.order,
                 offset = input.offset.coerceAtLeast(0),
                 limit = input.limit.coerceIn(1, 500),
                 predicate = { item -> !input.inScopeOnly || isHttpHistoryItemInScope(item) },
             ).items
+        if (entries.isEmpty()) {
+            requireConfiguredProjectScopeForInScopeOnly(
+                api = api,
+                inScopeOnly = input.inScopeOnly,
+            )
+        }
 
         data class Agg(
             val header: String,

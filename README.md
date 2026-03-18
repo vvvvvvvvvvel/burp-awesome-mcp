@@ -322,6 +322,23 @@ Paging behavior:
 
 ## Serialization model
 
+## Direct-send request options
+
+For `send_http1_requests` and `send_http2_requests`, `request_options` is a strict object.
+
+Allowed keys:
+- `http_mode`
+- `connection_id`
+- `redirection_mode`
+- `response_timeout_ms`
+- `server_name_indicator`
+- `upstream_tls_verification`
+
+Notes:
+- do not invent extra `request_options` fields; unsupported keys are rejected
+- use `redirection_mode`, not ad-hoc names such as `follow_redirects`
+- use `response_timeout_ms`, not aliases such as `timeout_seconds`
+
 ### HTTP serialization controls
 For HTTP history / Site Map / Organizer / direct-send results / scanner request-response snapshots, `serialization` controls:
 - `serialization.include_binary`
@@ -346,6 +363,7 @@ Important:
 - when `serialization.regex_excerpt` is enabled:
   - `match_context` becomes available per item/result
   - `request.body`, `response.body`, `request.raw`, and `response.raw` must not be requested in `fields`
+  - if the goal is to return only what matched, request `match_context` plus lightweight metadata such as `id`, `time`, `request.method`, `request.url`, or `response.status_code`
   - if `fields` is `null`, body/raw branches are automatically trimmed from the optimized default shape
   - `serialization.regex_excerpt.regex` is used for excerpts
 

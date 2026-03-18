@@ -1,6 +1,7 @@
 package net.portswigger.mcp.history
 
 import burp.api.montoya.MontoyaApi
+import burp.api.montoya.burpsuite.BurpSuite
 import burp.api.montoya.core.Annotations
 import burp.api.montoya.core.ByteArray
 import burp.api.montoya.http.HttpService
@@ -181,6 +182,25 @@ class SiteMapQueryServiceTest {
         }
     }
 
+    @Test
+    fun `query site map should fail when in scope filter has no matches and project scope is empty`() {
+        val burpSuite = mockk<BurpSuite>()
+        every { siteMap.requestResponses() } returns
+            listOf(
+                mockSiteMapItem("https://example.com/a", inScope = false),
+                mockSiteMapItem("https://example.com/b", inScope = false),
+            )
+        every { api.burpSuite() } returns burpSuite
+        every { burpSuite.exportProjectOptionsAsJson() } returns emptySiteMapProjectScopeJson()
+
+        val error =
+            assertThrows(IllegalArgumentException::class.java) {
+                service.querySiteMap(QuerySiteMapInput())
+            }
+
+        assertEquals(EMPTY_PROJECT_SCOPE_ERROR, error.message)
+    }
+
     private fun mockSiteMapItem(
         url: String,
         inScope: Boolean,
@@ -237,3 +257,15 @@ class SiteMapQueryServiceTest {
         return bytes
     }
 }
+
+private fun emptySiteMapProjectScopeJson(): String =
+    """
+    {
+      "target": {
+        "scope": {
+          "include": [],
+          "exclude": []
+        }
+      }
+    }
+    """.trimIndent()

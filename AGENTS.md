@@ -46,6 +46,8 @@
 - When `serialization.regex_excerpt` is enabled:
   - `match_context` may be requested or excluded through normal `fields` / `exclude_fields` projection
   - `request.body`, `response.body`, `request.raw`, and `response.raw` must not be requested in `fields`
+  - use `match_context` for matched snippets; do not combine snippet mode with full body branches in the same call
+  - correct shape is an object such as `"regex_excerpt": {"regex": "token", "context_chars": 10}`, not a bare string
 - HTTP list/get tools also support item-level projection:
   - `fields`: include only listed item paths
   - `exclude_fields`: remove listed item paths from otherwise optimized default items
@@ -88,6 +90,14 @@
 - `send_http1_requests` and `send_http2_requests` are direct sends to targets.
 - Requests from those tools do not automatically appear in Proxy HTTP history.
 - If later discovery through `list_proxy_http_history` or `list_site_map` is required, traffic must be sent through a Burp Proxy listener first.
+- `request_options` for direct-send tools is a strict object. Only these keys are part of the contract:
+  - `http_mode`
+  - `connection_id`
+  - `redirection_mode`
+  - `response_timeout_ms`
+  - `server_name_indicator`
+  - `upstream_tls_verification`
+- Do not invent extra `request_options` fields such as `cookie_jar_mode` or `timeout_seconds`.
 
 ## Input Contract Notes
 

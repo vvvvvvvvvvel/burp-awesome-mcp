@@ -41,6 +41,7 @@
   - `request.raw` / `response.raw` are materialized only when explicitly requested in `fields`
   - when `serialization.regex_excerpt` is enabled, `match_context` becomes available as a normal optional projection branch
   - when `serialization.regex_excerpt` is enabled, `request.body`, `response.body`, `request.raw`, and `response.raw` must not be requested in `fields`
+  - use `match_context` plus lightweight metadata if the goal is to inspect only matched snippets
   - optimized default HTTP output omits root `in_scope`, `request.path`, `request.query`, `request.in_scope`, empty `response.cookies`, and duplicate stated/inferred MIME fields when they equal `response.mime_type`
 
 Example `filter` + `serialization`:

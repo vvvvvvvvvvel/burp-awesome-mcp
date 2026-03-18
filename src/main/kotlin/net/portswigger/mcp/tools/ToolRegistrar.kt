@@ -51,6 +51,7 @@ import net.portswigger.mcp.history.findStartIndexById
 import net.portswigger.mcp.history.isLikelyBinaryPayload
 import net.portswigger.mcp.history.matchesRequestResponseFilter
 import net.portswigger.mcp.history.normalized
+import net.portswigger.mcp.history.requireConfiguredProjectScopeForInScopeOnly
 import net.portswigger.mcp.history.resolveListToolRegexControls
 import net.portswigger.mcp.history.resolveProjectedHttpMaterialization
 import net.portswigger.mcp.history.resolveRegexExcerptConfig
@@ -433,6 +434,12 @@ fun Server.registerBurpTools(api: MontoyaApi) {
                 if (statusSet != null && item.status().name !in statusSet) return@collectFilteredPage false
                 matchesRequestResponseFilter(item, rrFilter)
             }
+        if (selected.items.isEmpty()) {
+            requireConfiguredProjectScopeForInScopeOnly(
+                api = api,
+                inScopeOnly = filter.inScopeOnly,
+            )
+        }
 
         val mapped = selected.items.map { organizerItemToSummary(it, options, regexControls.excerptConfig) }
         val next = selected.nextItem?.let { copy(startId = it.id()) }

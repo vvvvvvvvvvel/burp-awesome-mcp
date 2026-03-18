@@ -150,6 +150,25 @@ class ToolDslValidationTest {
     }
 
     @Test
+    fun `query history should normalize json array string listener ports`() {
+        val raw =
+            Json
+                .parseToJsonElement(
+                    """{"filter":{"listener_ports":"[8080]","has_response":"true","in_scope_only":"true"}}""",
+                ).let { it as JsonObject }
+
+        val parsed =
+            toolJson.decodeFromJsonElement(
+                QueryProxyHttpHistoryInput.serializer(),
+                raw.normalizeAgentInput(),
+            )
+
+        assertEquals(listOf(8080), parsed.filter.listenerPorts)
+        assertEquals(true, parsed.filter.hasResponse)
+        assertEquals(true, parsed.filter.inScopeOnly)
+    }
+
+    @Test
     fun `csv splitting should not affect keys or urls`() {
         val raw =
             Json
@@ -200,6 +219,24 @@ class ToolDslValidationTest {
         assertEquals(2, parsed.startId)
         assertEquals("DECREASING", parsed.idDirection.name)
         assertEquals(false, parsed.filter.inScopeOnly)
+    }
+
+    @Test
+    fun `query history should normalize id direction aliases`() {
+        val raw =
+            Json
+                .parseToJsonElement(
+                    """{"limit":"5","start_id":"0","id_direction":"desc","filter":{"in_scope_only":"true"}}""",
+                ).let { it as JsonObject }
+
+        val parsed =
+            toolJson.decodeFromJsonElement(
+                QueryProxyHttpHistoryInput.serializer(),
+                raw.normalizeAgentInput(),
+            )
+
+        assertEquals("DECREASING", parsed.idDirection.name)
+        assertEquals(true, parsed.filter.inScopeOnly)
     }
 
     @Test
@@ -257,6 +294,25 @@ class ToolDslValidationTest {
         assertEquals(400, parsed.serialization.maxTextBodyChars)
         assertEquals(65536, parsed.serialization.maxBinaryBodyBytes)
         assertEquals(15, parsed.serialization.regexExcerpt!!.contextChars)
+    }
+
+    @Test
+    fun `query history should normalize bare regex excerpt string to object`() {
+        val raw =
+            Json
+                .parseToJsonElement(
+                    """{"serialization":{"regex_excerpt":"layout_container=\\[CSMA\\]","max_text_body_chars":"1200"}}""",
+                ).let { it as JsonObject }
+
+        val parsed =
+            toolJson.decodeFromJsonElement(
+                QueryProxyHttpHistoryInput.serializer(),
+                raw.normalizeAgentInput(),
+            )
+
+        assertEquals("layout_container=\\[CSMA\\]", parsed.serialization.regexExcerpt!!.regex)
+        assertEquals(10, parsed.serialization.regexExcerpt!!.contextChars)
+        assertEquals(1200, parsed.serialization.maxTextBodyChars)
     }
 
     @Test

@@ -173,6 +173,17 @@ private val STRING_BOOLEAN_FIELDS =
         "active_tests",
     )
 
+private val ENUM_VALUE_ALIASES =
+    mapOf(
+        "id_direction" to
+            mapOf(
+                "asc" to "increasing",
+                "inc" to "increasing",
+                "desc" to "decreasing",
+                "dec" to "decreasing",
+            ),
+    )
+
 private val STRING_INTEGER_FIELDS =
     setOf(
         "target_port",
@@ -235,7 +246,7 @@ private fun normalizeJsonElement(
                         } else {
                             normalizedValue
                         }
-                    key to coerceNumericString(key, coerceBooleanString(key, coercedArray))
+                    key to coerceNumericString(key, coerceEnumAliasString(key, coerceBooleanString(key, coercedArray)))
                 }
             if (key == "request_options") {
                 normalized = normalizeRequestOptionsAliases(normalized)
@@ -244,7 +255,14 @@ private fun normalizeJsonElement(
         }
 
         is JsonArray -> JsonArray(element.map { normalizeJsonElement(it, key) })
-        is JsonPrimitive -> parseJsonObjectString(key, element)?.let { normalizeJsonElement(it, key) } ?: element
+        is JsonPrimitive -> {
+            val regexExcerptObject = coerceRegexExcerptString(key, element)
+            if (regexExcerptObject != null) {
+                normalizeJsonElement(regexExcerptObject, key)
+            } else {
+                parseJsonObjectString(key, element)?.let { normalizeJsonElement(it, key) } ?: element
+            }
+        }
     }
 
 private fun coerceScalarToArray(
@@ -252,6 +270,10 @@ private fun coerceScalarToArray(
     value: JsonElement,
 ): JsonArray {
     val scalarContent = (value as? JsonPrimitive)?.contentOrNull
+    val parsedArray = parseJsonArrayString(scalarContent)
+    if (parsedArray != null) {
+        return JsonArray(parsedArray.map { normalizeJsonElement(it, key) })
+    }
     if (key !in CSV_STRING_TO_ARRAY_FIELDS || scalarContent == null || ',' !in scalarContent) {
         return JsonArray(listOf(value))
     }
@@ -299,6 +321,23 @@ private fun coerceNumericString(
 private val INTEGER_STRING_REGEX = Regex("-?\\d+")
 private val LONG_STRING_REGEX = Regex("-?\\d+")
 
+private fun parseJsonArrayString(content: String?): JsonArray? {
+    val trimmed = content?.trim() ?: return null
+    if (!trimmed.startsWith("[")) return null
+    return runCatching { toolJson.parseToJsonElement(trimmed) as? JsonArray }.getOrNull()
+}
+
+private fun coerceEnumAliasString(
+    key: String,
+    value: JsonElement,
+): JsonElement {
+    val aliases = ENUM_VALUE_ALIASES[key] ?: return value
+    val primitive = value as? JsonPrimitive ?: return value
+    val content = primitive.contentOrNull?.trim()?.lowercase() ?: return value
+    val canonical = aliases[content] ?: return value
+    return JsonPrimitive(canonical)
+}
+
 private fun parseJsonObjectString(
     key: String?,
     value: JsonPrimitive,
@@ -307,6 +346,16 @@ private fun parseJsonObjectString(
     val content = value.contentOrNull?.trim() ?: return null
     if (!content.startsWith("{")) return null
     return runCatching { toolJson.parseToJsonElement(content) as? JsonObject }.getOrNull()
+}
+
+private fun coerceRegexExcerptString(
+    key: String?,
+    value: JsonPrimitive,
+): JsonObject? {
+    if (key != "regex_excerpt") return null
+    val content = value.contentOrNull?.trim() ?: return null
+    if (content.isEmpty() || content.startsWith("{")) return null
+    return JsonObject(mapOf("regex" to JsonPrimitive(content)))
 }
 
 private fun normalizeRequestOptionsAliases(properties: Map<String, JsonElement>): Map<String, JsonElement> {
