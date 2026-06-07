@@ -6,6 +6,7 @@ import io.ktor.client.plugins.sse.SSE
 import io.ktor.client.request.accept
 import io.ktor.http.ContentType
 import io.modelcontextprotocol.kotlin.sdk.client.Client
+import io.modelcontextprotocol.kotlin.sdk.client.ReconnectionOptions
 import io.modelcontextprotocol.kotlin.sdk.client.SseClientTransport
 import io.modelcontextprotocol.kotlin.sdk.client.StreamableHttpClientTransport
 import io.modelcontextprotocol.kotlin.sdk.types.CallToolResult
@@ -66,8 +67,8 @@ class TestSseMcpClient {
                 StreamableHttpClientTransport(
                     newHttpClient(),
                     endpointUrl,
-                    30.seconds,
-                    {
+                    reconnectionOptions = ReconnectionOptions(maxReconnectionDelay = 30.seconds),
+                    requestBuilder = {
                         accept(ContentType.Application.Json)
                     },
                 )

@@ -105,7 +105,11 @@ class AgentMcpServerManager(
                                         route("/mcp") {
                                             post {
                                                 val transport =
-                                                    StreamableHttpServerTransport(enableJsonResponse = true).also {
+                                                    StreamableHttpServerTransport(
+                                                        StreamableHttpServerTransport.Configuration(
+                                                            enableJsonResponse = true,
+                                                        ),
+                                                    ).also {
                                                         it.setSessionIdGenerator(null)
                                                     }
                                                 mcpServer.createSession(transport)

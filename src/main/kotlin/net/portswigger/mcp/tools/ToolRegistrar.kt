@@ -1115,10 +1115,10 @@ private fun parseHttpMode(input: String): HttpMode =
 
 private fun parseRedirectionMode(input: String): RedirectionMode =
     when (input.trim().lowercase()) {
-        "always" -> RedirectionMode.ALWAYS
-        "never" -> RedirectionMode.NEVER
-        "same_host" -> RedirectionMode.SAME_HOST
-        "in_scope" -> RedirectionMode.IN_SCOPE
+        "always", "follow", "follow_redirects", "redirect", "redirects", "all" -> RedirectionMode.ALWAYS
+        "never", "none", "no_redirect", "no_redirects", "dont_follow", "do_not_follow" -> RedirectionMode.NEVER
+        "same_host", "samehost", "same-host" -> RedirectionMode.SAME_HOST
+        "in_scope", "inscope", "in-scope" -> RedirectionMode.IN_SCOPE
         else -> throw IllegalArgumentException("unsupported redirectionMode: $input")
     }
 

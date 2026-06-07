@@ -379,10 +379,20 @@ fun headersToMap(headers: List<HttpHeader>): Map<String, List<String>> {
 
 private class SerializedPayloadCapture(
     val headers: Map<String, List<String>>?,
-    val bodyBytes: ByteArray,
-    val rawBytes: ByteArray,
-    val contentType: String?,
-)
+    private val bodySupplier: () -> ByteArray,
+    private val rawSupplier: () -> ByteArray,
+    private val contentTypeSupplier: () -> String?,
+) {
+    val bodyBytes: ByteArray by lazy(LazyThreadSafetyMode.NONE) {
+        runCatching(bodySupplier).getOrDefault(byteArrayOf())
+    }
+    val rawBytes: ByteArray by lazy(LazyThreadSafetyMode.NONE) {
+        runCatching(rawSupplier).getOrDefault(byteArrayOf())
+    }
+    val contentType: String? by lazy(LazyThreadSafetyMode.NONE) {
+        runCatching(contentTypeSupplier).getOrNull()
+    }
+}
 
 private fun capturePayload(
     request: HttpRequest,
@@ -417,9 +427,9 @@ private fun captureSerializedPayload(
 ): SerializedPayloadCapture =
     SerializedPayloadCapture(
         headers = if (includeHeaders) headersToMap(headersSupplier()) else null,
-        bodyBytes = runCatching(bodySupplier).getOrDefault(byteArrayOf()),
-        rawBytes = runCatching(rawSupplier).getOrDefault(byteArrayOf()),
-        contentType = runCatching(contentTypeSupplier).getOrNull(),
+        bodySupplier = bodySupplier,
+        rawSupplier = rawSupplier,
+        contentTypeSupplier = contentTypeSupplier,
     )
 
 private fun serializeOptionalBody(

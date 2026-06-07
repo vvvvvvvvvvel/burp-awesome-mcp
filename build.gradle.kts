@@ -26,8 +26,8 @@ val awesomeDebugBuild =
         .orElse(false)
 
 val generatedBuildFlagsDir = layout.buildDirectory.dir("generated/source/buildFlags/main/kotlin")
-val generateBuildFlags by
-    tasks.registering {
+val generateBuildFlags =
+    tasks.register("generateBuildFlags") {
         group = "build setup"
         description = "Generates build-time flags for Awesome MCP."
         inputs.property("awesome.debug", awesomeDebugBuild)

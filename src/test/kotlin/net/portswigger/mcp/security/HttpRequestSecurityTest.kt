@@ -573,6 +573,59 @@ class HttpRequestSecurityTest {
     }
 
     @Test
+    fun `serialize request should not read body or raw when disabled`() {
+        val request = mockk<HttpRequest>()
+        val httpService = mockk<HttpService>()
+        val options = metadataOnlyOptions()
+
+        every { request.method() } returns "GET"
+        every { request.url() } returns "https://example.com/"
+        every { request.path() } returns "/"
+        every { request.query() } returns null
+        every { request.httpService() } returns httpService
+        every { request.isInScope() } returns true
+        every { request.httpVersion() } returns "HTTP/1.1"
+        every { request.headers() } throws AssertionError("headers should not be accessed")
+        every { request.body() } throws AssertionError("body should not be accessed")
+        every { request.toByteArray() } throws AssertionError("raw request should not be accessed")
+        every { request.headerValue(any()) } throws AssertionError("headerValue should not be accessed")
+        every { httpService.host() } returns "example.com"
+        every { httpService.port() } returns 443
+        every { httpService.secure() } returns true
+
+        val serialized = serializeHttpRequest(request, options)
+
+        assertNull(serialized.headers)
+        assertNull(serialized.body)
+        assertNull(serialized.raw)
+    }
+
+    @Test
+    fun `serialize response should not read body or raw when disabled`() {
+        val response = mockk<HttpResponse>()
+        val options = metadataOnlyOptions()
+
+        every { response.statusCode() } returns 200.toShort()
+        every { response.reasonPhrase() } returns "OK"
+        every { response.httpVersion() } returns "HTTP/1.1"
+        every { response.mimeType() } throws IllegalStateException("mime unavailable")
+        every { response.statedMimeType() } throws IllegalStateException("stated mime unavailable")
+        every { response.inferredMimeType() } throws IllegalStateException("inferred mime unavailable")
+        every { response.headers() } throws AssertionError("headers should not be accessed")
+        every { response.cookies() } throws AssertionError("cookies should not be accessed")
+        every { response.body() } throws AssertionError("body should not be accessed")
+        every { response.toByteArray() } throws AssertionError("raw response should not be accessed")
+        every { response.headerValue(any()) } throws AssertionError("headerValue should not be accessed")
+
+        val serialized = serializeHttpResponse(response, options)
+
+        assertNull(serialized.headers)
+        assertNull(serialized.cookies)
+        assertNull(serialized.body)
+        assertNull(serialized.raw)
+    }
+
+    @Test
     fun `serialize response should short circuit synthetic zero status response`() {
         val response = mockk<HttpResponse>()
         val options =
@@ -629,6 +682,8 @@ class HttpRequestSecurityTest {
         every { item.id() } returns id
         every { item.time() } returns ZonedDateTime.parse("2026-01-01T00:00:00Z")
         every { item.listenerPort() } returns listenerPort
+        every { item.method() } returns method
+        every { item.host() } returns host
         every { item.edited() } returns false
         every { item.annotations() } returns annotations
         every { annotations.notes() } returns null
@@ -676,6 +731,21 @@ class HttpRequestSecurityTest {
         every { header.value() } returns value
         return header
     }
+
+    private fun metadataOnlyOptions(): HttpSerializationOptions =
+        HttpSerializationOptions(
+            includeHeaders = false,
+            includeRequestBody = false,
+            includeResponseBody = false,
+            includeRawRequest = false,
+            includeRawResponse = false,
+            includeBinary = false,
+            maxRequestBodyChars = 1024,
+            maxResponseBodyChars = 1024,
+            maxRawBodyChars = 1024,
+            textOverflowMode = TextOverflowMode.OMIT,
+            maxBinaryBodyBytes = 65_536,
+        )
 
     private fun mockByteArray(data: kotlin.ByteArray): ByteArray {
         val bytes = mockk<ByteArray>()

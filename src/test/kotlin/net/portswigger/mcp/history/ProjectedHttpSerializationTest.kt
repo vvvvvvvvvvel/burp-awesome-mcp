@@ -52,6 +52,21 @@ class ProjectedHttpSerializationTest {
     }
 
     @Test
+    fun `specific header paths should auto-enable headers`() {
+        val materialization =
+            resolveProjectedHttpMaterialization(
+                fields = setOf("request.headers.Cookie", "response.headers.X-Bitrix24-User"),
+                excludeFields = null,
+            )
+
+        assertTrue(materialization.includeHeaders)
+        assertFalse(materialization.includeRequestBody)
+        assertFalse(materialization.includeResponseBody)
+        assertFalse(materialization.includeRawRequest)
+        assertFalse(materialization.includeRawResponse)
+    }
+
+    @Test
     fun `raw branches should materialize only when explicitly requested`() {
         val materialization =
             resolveProjectedHttpMaterialization(

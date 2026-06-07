@@ -7,7 +7,7 @@ description: >-
   scanner/collaborator flows, and cookie jar operations.
 metadata:
   author: vvvvvvvvvvel
-  version: "1.1.1"
+  version: "1.2.0"
 ---
 
 # Awesome MCP Burp Operations
@@ -221,6 +221,7 @@ Top-level:
 
 Availability notes:
 - with `fields`, `request.headers` is materialized only when the selected paths require it
+- use `request.headers` for the whole map or `request.headers.Cookie` for one header name
 - with `exclude_fields` or with both projection fields null, `request.headers` is part of the optimized default non-raw shape
 - with `fields`, `request.body` is materialized only when the selected paths require it
 - with `exclude_fields` or with both projection fields null, `request.body` is part of the optimized default non-raw shape
@@ -240,6 +241,7 @@ Availability notes:
 
 Availability notes:
 - with `fields`, `response.headers` / `response.cookies` are materialized only when the selected paths require them
+- use `response.headers` for the whole map or `response.headers.Set-Cookie` for one header name
 - with `exclude_fields` or with both projection fields null, `response.headers` are part of the optimized default non-raw shape
 - empty `response.cookies` are omitted from the optimized default shape
 - with `fields`, `response.body` is materialized only when the selected paths require it
@@ -434,6 +436,7 @@ Behavior:
 - `send_http1_requests` and `send_http2_requests` are direct sends; they do not automatically appear in Proxy history.
 - If later discovery via `list_proxy_http_history` / `list_site_map` is required, route traffic through a Burp Proxy listener first.
 - `send_http1_requests` and `send_http2_requests` also support `fields` / `exclude_fields`; projection paths are relative to each successful `results[].result` object (`status_code`, `has_response`, `request.*`, `response.*`).
+- For a specific header, use `request.headers.Header-Name` or `response.headers.Header-Name`; header matching is case-insensitive and output preserves the original header key.
 - `send_http2_requests` should use HTTP/2 mode options and `headers_list` when duplicate header names must be preserved.
 - `get_site_map_by_keys` accepts only keys from `list_site_map.results[].key`.
 - `list_scanner_tasks` is runtime-local to Awesome MCP tracking; it is not a global historical scanner inventory.
@@ -451,6 +454,7 @@ Behavior:
   - `server_name_indicator`
   - `upstream_tls_verification`
 - Do not invent extra `request_options` fields such as `cookie_jar_mode` or `timeout_seconds`.
+- `redirection_mode` canonical values are `always`, `never`, `same_host`, `in_scope`; `follow` is accepted as an alias for `always`.
 
 ## Recommended call patterns
 

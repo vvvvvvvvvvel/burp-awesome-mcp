@@ -459,6 +459,105 @@ class FieldProjectionTest {
     }
 
     @Test
+    fun `header map child paths should be accepted as specific selectors`() {
+        val projection =
+            QueryProxyHttpHistoryInput(
+                fields = listOf("id", "response.headers.X-Bitrix24-User", "request.headers.Cookie"),
+            ).toFieldProjection()
+
+        assertEquals(setOf("id", "response.headers.X-Bitrix24-User", "request.headers.Cookie"), projection!!.fields)
+    }
+
+    @Test
+    fun `header map child paths should keep only matching headers case insensitively`() {
+        val payload =
+            JsonObject(
+                mapOf(
+                    "results" to
+                        JsonArray(
+                            listOf(
+                                JsonObject(
+                                    mapOf(
+                                        "id" to JsonPrimitive(7),
+                                        "request" to
+                                            JsonObject(
+                                                mapOf(
+                                                    "headers" to
+                                                        JsonObject(
+                                                            mapOf(
+                                                                "Cookie" to JsonArray(listOf(JsonPrimitive("a=b"))),
+                                                                "Accept" to JsonArray(listOf(JsonPrimitive("*/*"))),
+                                                            ),
+                                                        ),
+                                                ),
+                                            ),
+                                        "response" to
+                                            JsonObject(
+                                                mapOf(
+                                                    "headers" to
+                                                        JsonObject(
+                                                            mapOf(
+                                                                "X-Bitrix24-User" to JsonArray(listOf(JsonPrimitive("42"))),
+                                                                "Set-Cookie" to JsonArray(listOf(JsonPrimitive("a=b"))),
+                                                                "X-Request-ID" to JsonArray(listOf(JsonPrimitive("req-1"))),
+                                                                "Content-Security-Policy" to
+                                                                    JsonArray(
+                                                                        listOf(JsonPrimitive("default-src 'self'")),
+                                                                    ),
+                                                                "X.Custom.Header" to JsonArray(listOf(JsonPrimitive("custom"))),
+                                                                "Content-Type" to JsonArray(listOf(JsonPrimitive("text/html"))),
+                                                            ),
+                                                        ),
+                                                ),
+                                            ),
+                                    ),
+                                ),
+                            ),
+                        ),
+                ),
+            )
+
+        val projected =
+            applyItemFieldProjection(
+                payload,
+                FieldProjection(
+                    fields =
+                        setOf(
+                            "response.headers.x-bitrix24-user",
+                            "response.headers.set-cookie",
+                            "response.headers.x-request-id",
+                            "response.headers.content-security-policy",
+                            "response.headers.x.custom.header",
+                            "request.headers.cookie",
+                        ),
+                ),
+            )
+
+        val result = (projected["results"] as JsonArray)[0] as JsonObject
+        val requestHeaders = ((result["request"] as JsonObject)["headers"] as JsonObject)
+        val responseHeaders = ((result["response"] as JsonObject)["headers"] as JsonObject)
+        assertEquals(setOf("Cookie"), requestHeaders.keys)
+        assertEquals(
+            setOf("X-Bitrix24-User", "Set-Cookie", "X-Request-ID", "Content-Security-Policy", "X.Custom.Header"),
+            responseHeaders.keys,
+        )
+    }
+
+    @Test
+    fun `scanner issue header child paths should require request response prefix`() {
+        val validProjection =
+            QueryScannerIssuesInput(
+                fields = listOf("request_responses.response.headers.X-Request-ID"),
+            ).toFieldProjection()
+
+        assertEquals(setOf("request_responses.response.headers.X-Request-ID"), validProjection!!.fields)
+
+        assertThrows(IllegalArgumentException::class.java) {
+            QueryScannerIssuesInput(fields = listOf("response.headers.X-Request-ID")).toFieldProjection()
+        }
+    }
+
+    @Test
     fun `field projection should reject both fields and exclude fields at once`() {
         val input =
             QueryProxyHttpHistoryInput(

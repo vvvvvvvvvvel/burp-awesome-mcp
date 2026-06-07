@@ -233,6 +233,7 @@ HTTP history / Site Map / Organizer projection:
 Direct-send result projection:
 - `send_http1_requests` / `send_http2_requests` also support `fields` / `exclude_fields`
 - paths are relative to each successful `results[].result` object
+- header maps support whole-branch paths such as `response.headers` and specific header paths such as `response.headers.X-Bitrix24-User`
 - common roots:
   - `status_code`
   - `has_response`
@@ -337,6 +338,7 @@ Allowed keys:
 Notes:
 - do not invent extra `request_options` fields; unsupported keys are rejected
 - use `redirection_mode`, not ad-hoc names such as `follow_redirects`
+- `redirection_mode` canonical values are `always`, `never`, `same_host`, `in_scope`; `follow` is accepted as an alias for `always`
 - use `response_timeout_ms`, not aliases such as `timeout_seconds`
 
 ### HTTP serialization controls

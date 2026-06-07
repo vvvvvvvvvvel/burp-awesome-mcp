@@ -30,8 +30,8 @@ internal fun resolveProjectedHttpMaterialization(
         includeHeaders =
             includeRequestSubtree ||
                 includeResponseSubtree ||
-                "request.headers" in fields ||
-                "response.headers" in fields ||
+                fields.containsHeaderPath("request.headers") ||
+                fields.containsHeaderPath("response.headers") ||
                 "response.cookies" in fields,
         includeRequestBody = !regexExcerptEnabled && (includeRequestSubtree || "request.body" in fields),
         includeResponseBody = !regexExcerptEnabled && (includeResponseSubtree || "response.body" in fields),
@@ -39,3 +39,5 @@ internal fun resolveProjectedHttpMaterialization(
         includeRawResponse = !regexExcerptEnabled && "response.raw" in fields,
     )
 }
+
+private fun Set<String>.containsHeaderPath(path: String): Boolean = any { field -> field == path || field.startsWith("$path.") }

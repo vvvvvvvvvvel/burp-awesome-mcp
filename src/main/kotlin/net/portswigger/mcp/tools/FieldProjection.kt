@@ -30,6 +30,13 @@ private val projectionJson =
     }
 
 private val fieldPathPattern = Regex("^[a-z0-9_]+(?:\\.[a-z0-9_]+)*$")
+private val headerMapFieldPaths =
+    listOf(
+        "request_responses.response.headers",
+        "request_responses.request.headers",
+        "request.headers",
+        "response.headers",
+    )
 internal val HTTP_HISTORY_FIELD_PATHS = collectProjectablePaths(SerializedHttpHistoryEntry.serializer()) + matchContextFieldPaths()
 internal val SITE_MAP_FIELD_PATHS = collectProjectablePaths(SerializedSiteMapEntry.serializer()) + matchContextFieldPaths()
 internal val ORGANIZER_FIELD_PATHS = collectProjectablePaths(OrganizerItemSummary.serializer()) + matchContextFieldPaths()
@@ -306,15 +313,34 @@ private fun normalizeFieldPaths(
     }
 
     normalized.forEach { path ->
-        require(fieldPathPattern.matches(path)) {
-            "$fieldName contains invalid path '$path'"
-        }
-        require(path in allowedPaths) {
-            "$fieldName contains unsupported path '$path'"
+        if (isHeaderMapChildPath(path, allowedPaths)) {
+            return@forEach
+        } else {
+            require(fieldPathPattern.matches(path)) {
+                "$fieldName contains invalid path '$path'"
+            }
+            require(path in allowedPaths) {
+                "$fieldName contains unsupported path '$path'"
+            }
         }
     }
 
     return normalized.toSet()
+}
+
+private fun isHeaderMapChildPath(
+    path: String,
+    allowedPaths: Set<String>,
+): Boolean =
+    headerMapFieldPaths.any { headerPath ->
+        headerPath in allowedPaths &&
+            path.startsWith("$headerPath.") &&
+            path.length > headerPath.length + 1
+    }
+
+private fun splitProjectionPath(path: String): List<String> {
+    val headerPath = headerMapFieldPaths.firstOrNull { path.startsWith("$it.") } ?: return path.split('.')
+    return headerPath.split('.') + path.removePrefix("$headerPath.")
 }
 
 private fun applyProjection(
@@ -333,7 +359,7 @@ private fun includeFields(
 ): JsonObject {
     val target = linkedMapOf<String, JsonElement>()
     fields.forEach { path ->
-        mergeIncludedPath(target, source, path.split('.'))
+        mergeIncludedPath(target, source, splitProjectionPath(path))
     }
     return JsonObject(target)
 }
@@ -342,25 +368,31 @@ private fun mergeIncludedPath(
     target: MutableMap<String, JsonElement>,
     source: JsonObject,
     segments: List<String>,
+    inHeaderMap: Boolean = false,
 ) {
     val head = segments.first()
-    val value = source[head] ?: return
+    val (sourceKey, value) = findProjectionEntry(source, head, ignoreCase = inHeaderMap) ?: return
 
     if (segments.size == 1) {
-        target[head] = mergeJsonElements(target[head], value)
+        target[sourceKey] = mergeJsonElements(target[sourceKey], value)
         return
     }
 
     when (value) {
         is JsonObject -> {
-            val existing = target[head] as? JsonObject
+            val existing = target[sourceKey] as? JsonObject
             val nestedTarget = linkedMapOf<String, JsonElement>()
             if (existing != null) {
                 nestedTarget.putAll(existing)
             }
-            mergeIncludedPath(nestedTarget, value, segments.drop(1))
+            mergeIncludedPath(
+                target = nestedTarget,
+                source = value,
+                segments = segments.drop(1),
+                inHeaderMap = sourceKey == "headers",
+            )
             if (nestedTarget.isNotEmpty()) {
-                target[head] = JsonObject(nestedTarget)
+                target[sourceKey] = JsonObject(nestedTarget)
             }
         }
 
@@ -369,16 +401,20 @@ private fun mergeIncludedPath(
                 JsonArray(
                     value.map { element ->
                         when (element) {
-                            is JsonObject -> includeFields(element, setOf(segments.drop(1).joinToString(".")))
+                            is JsonObject -> {
+                                val nestedTarget = linkedMapOf<String, JsonElement>()
+                                mergeIncludedPath(nestedTarget, element, segments.drop(1))
+                                JsonObject(nestedTarget)
+                            }
                             else -> element
                         }
                     },
                 )
-            target[head] = mergeJsonElements(target[head], projectedArray)
+            target[sourceKey] = mergeJsonElements(target[sourceKey], projectedArray)
         }
 
         else -> {
-            target[head] = mergeJsonElements(target[head], value)
+            target[sourceKey] = mergeJsonElements(target[sourceKey], value)
         }
     }
 }
@@ -390,22 +426,34 @@ private fun excludeFields(
     fields
         .sortedByDescending { it.count { char -> char == '.' } }
         .fold(source) { current, path ->
-            removePath(current, path.split('.'))
+            removePath(current, splitProjectionPath(path))
         }
 
 private fun removePath(
     source: JsonObject,
     segments: List<String>,
+    inHeaderMap: Boolean = false,
 ): JsonObject {
     val head = segments.first()
-    val current = source[head] ?: return source
+    val (sourceKey, current) = findProjectionEntry(source, head, ignoreCase = inHeaderMap) ?: return source
 
     if (segments.size == 1) {
-        return JsonObject(source - head)
+        return JsonObject(source - sourceKey)
     }
 
     return when (current) {
-        is JsonObject -> JsonObject(source + (head to removePath(current, segments.drop(1))))
+        is JsonObject ->
+            JsonObject(
+                source +
+                    (
+                        sourceKey to
+                            removePath(
+                                source = current,
+                                segments = segments.drop(1),
+                                inHeaderMap = sourceKey == "headers",
+                            )
+                    ),
+            )
         is JsonArray -> {
             val updatedArray =
                 JsonArray(
@@ -417,11 +465,21 @@ private fun removePath(
                         }
                     },
                 )
-            JsonObject(source + (head to updatedArray))
+            JsonObject(source + (sourceKey to updatedArray))
         }
 
         else -> source
     }
+}
+
+private fun findProjectionEntry(
+    source: JsonObject,
+    key: String,
+    ignoreCase: Boolean,
+): Pair<String, JsonElement>? {
+    source[key]?.let { return key to it }
+    if (!ignoreCase) return null
+    return source.entries.firstOrNull { (candidate, _) -> candidate.equals(key, ignoreCase = true) }?.toPair()
 }
 
 private fun mergeJsonElements(

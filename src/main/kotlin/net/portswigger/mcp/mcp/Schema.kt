@@ -107,6 +107,7 @@ private fun applyKnownPropertySchemaHints(
                 "Projection paths relative to each successful result object inside results[].result. ",
             )
             applyProjectedHttpSerializationHints(properties)
+            applySendRequestOptionsHints(properties)
         }
 
         "SendHttp2RequestInput" -> {
@@ -116,8 +117,43 @@ private fun applyKnownPropertySchemaHints(
                 "Projection paths relative to each successful result object inside results[].result. ",
             )
             applyProjectedHttpSerializationHints(properties)
+            applySendRequestOptionsHints(properties)
         }
     }
+}
+
+private fun applySendRequestOptionsHints(properties: MutableMap<String, JsonElement>) {
+    val requestOptionsSchema = properties["request_options"] ?: return
+    properties["request_options"] = updateRequestOptionsSchema(requestOptionsSchema)
+}
+
+private fun updateRequestOptionsSchema(schema: JsonElement): JsonElement {
+    val objectSchema = schema as? JsonObject ?: return schema
+    val anyOf = objectSchema["anyOf"] as? JsonArray
+    if (anyOf != null) {
+        return JsonObject(
+            objectSchema +
+                ("anyOf" to JsonArray(anyOf.map(::updateRequestOptionsSchema))),
+        )
+    }
+
+    val nestedProperties = objectSchema["properties"] as? JsonObject ?: return schema
+    val redirectionModeSchema = nestedProperties["redirection_mode"] as? JsonObject ?: return schema
+    val updatedRedirectionMode =
+        JsonObject(
+            redirectionModeSchema +
+                mapOf(
+                    "description" to
+                        JsonPrimitive(
+                            "Redirect behavior. Canonical values: always, never, same_host, in_scope. " +
+                                "Accepted aliases include follow for always.",
+                        ),
+                ),
+        )
+    return JsonObject(
+        objectSchema +
+            ("properties" to JsonObject(nestedProperties + ("redirection_mode" to updatedRedirectionMode))),
+    )
 }
 
 private fun applyProjectionSchemaHints(

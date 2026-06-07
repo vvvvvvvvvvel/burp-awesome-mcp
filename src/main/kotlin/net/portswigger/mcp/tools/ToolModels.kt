@@ -35,7 +35,7 @@ data class SendHttp2RequestItem(
     val pseudoHeaders: Map<String, String>,
     val headers: Map<String, String>,
     val headersList: List<HttpHeaderNameValueInput>? = null,
-    val requestBody: String,
+    val requestBody: String = "",
     val targetHostname: String,
     val targetPort: Int,
     val usesHttps: Boolean,

@@ -182,6 +182,23 @@ private val ENUM_VALUE_ALIASES =
                 "desc" to "decreasing",
                 "dec" to "decreasing",
             ),
+        "redirection_mode" to
+            mapOf(
+                "follow" to "always",
+                "follow_redirects" to "always",
+                "redirect" to "always",
+                "redirects" to "always",
+                "all" to "always",
+                "none" to "never",
+                "no_redirect" to "never",
+                "no_redirects" to "never",
+                "dont_follow" to "never",
+                "do_not_follow" to "never",
+                "samehost" to "same_host",
+                "same-host" to "same_host",
+                "inscope" to "in_scope",
+                "in-scope" to "in_scope",
+            ),
     )
 
 private val STRING_INTEGER_FIELDS =
@@ -406,7 +423,7 @@ private inline fun executeToolHandler(
     try {
         val resultText = block()
         val durationMs = elapsedMillis(startedNanos)
-        val responseBytes = resultText.toByteArray().size
+        val responseBytes = utf8ByteLength(resultText)
         val note = summarizeText(resultText)
 
         McpOutputLogger.logTool(
@@ -436,6 +453,28 @@ private inline fun executeToolHandler(
 
 @PublishedApi
 internal fun elapsedMillis(startedNanos: Long): Long = (System.nanoTime() - startedNanos) / 1_000_000
+
+@PublishedApi
+internal fun utf8ByteLength(value: String): Int {
+    var bytes = 0
+    var index = 0
+    while (index < value.length) {
+        val char = value[index]
+        bytes +=
+            when {
+                char.code <= 0x7F -> 1
+                char.code <= 0x7FF -> 2
+                char.isHighSurrogate() && index + 1 < value.length && value[index + 1].isLowSurrogate() -> {
+                    index += 1
+                    4
+                }
+                char.isSurrogate() -> 1
+                else -> 3
+            }
+        index += 1
+    }
+    return bytes
+}
 
 @PublishedApi
 internal fun summarizeText(value: String): String {

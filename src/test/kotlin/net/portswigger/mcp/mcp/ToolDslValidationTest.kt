@@ -9,6 +9,7 @@ import net.portswigger.mcp.history.QueryProxyHttpHistoryInput
 import net.portswigger.mcp.tools.QueryOrganizerItemsInput
 import net.portswigger.mcp.tools.QueryScannerIssuesInput
 import net.portswigger.mcp.tools.SendHttp1RequestInput
+import net.portswigger.mcp.tools.SendHttp2RequestInput
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -353,6 +354,23 @@ class ToolDslValidationTest {
     }
 
     @Test
+    fun `send http2 input should default missing request body to empty string`() {
+        val raw =
+            Json
+                .parseToJsonElement(
+                    """{"items":[{"pseudo_headers":{":method":"GET",":path":"/",":scheme":"https",":authority":"example.com"},"headers":{},"target_hostname":"example.com","target_port":443,"uses_https":true}]}""",
+                ).let { it as JsonObject }
+
+        val parsed =
+            toolJson.decodeFromJsonElement(
+                SendHttp2RequestInput.serializer(),
+                raw.normalizeAgentInput(),
+            )
+
+        assertEquals("", parsed.items.single().requestBody)
+    }
+
+    @Test
     fun `send http1 input should normalize follow redirects alias`() {
         val raw =
             Json
@@ -367,5 +385,29 @@ class ToolDslValidationTest {
             )
 
         assertEquals("never", parsed.requestOptions!!.redirectionMode)
+    }
+
+    @Test
+    fun `send http1 input should normalize redirection mode follow alias`() {
+        val raw =
+            Json
+                .parseToJsonElement(
+                    """{"items":[{"content":"GET / HTTP/1.1\\r\\nHost: example.com\\r\\n\\r\\n","target_hostname":"example.com","target_port":443,"uses_https":true}],"request_options":{"redirection_mode":"follow"}}""",
+                ).let { it as JsonObject }
+
+        val parsed =
+            toolJson.decodeFromJsonElement(
+                SendHttp1RequestInput.serializer(),
+                raw.normalizeAgentInput(),
+            )
+
+        assertEquals("always", parsed.requestOptions!!.redirectionMode)
+    }
+
+    @Test
+    fun `utf8 byte length should not allocate encoded copy`() {
+        val value = "abc Привет \uD83D\uDD25"
+
+        assertEquals(value.toByteArray(Charsets.UTF_8).size, utf8ByteLength(value))
     }
 }

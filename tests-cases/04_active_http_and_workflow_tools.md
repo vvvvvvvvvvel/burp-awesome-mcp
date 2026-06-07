@@ -23,7 +23,7 @@
 ### Shared `request_options` object (`send_http1_requests`, `send_http2_requests`)
 - `http_mode` (string|null): transport mode (`http_1`, `http_2`, `http_2_ignore_alpn` depending on tool).
 - `connection_id` (string|null): reuse connection context if supported.
-- `redirection_mode` (string|null): redirect behavior.
+- `redirection_mode` (string|null): redirect behavior; canonical values are `always`, `never`, `same_host`, `in_scope`; `follow` is accepted as an alias for `always`.
 - `response_timeout_ms` (long|null): per-request timeout.
 - `server_name_indicator` (string|null): explicit TLS SNI hostname.
 - `upstream_tls_verification` (bool, default `false`): enable/disable upstream cert verification.
@@ -57,7 +57,7 @@ Request options example:
   - `pseudo_headers` (object): required HTTP/2 pseudo-headers (for example `:method`, `:scheme`, `:authority`, `:path`).
   - `headers` (object): regular headers map.
   - `headers_list` (`[{name,value}]`|null): optional ordered/duplicate-safe header list.
-  - `request_body` (string)
+  - `request_body` (string, default `""`)
   - `target_hostname` (string)
   - `target_port` (int)
   - `uses_https` (bool)
@@ -69,6 +69,7 @@ Request options example:
 
 Projection notes for `send_http1_requests` / `send_http2_requests`:
 - use `fields` to keep only needed result branches such as `status_code`, `has_response`, `response.status_code`, `response.body`
+- header maps support whole-branch paths such as `response.headers` and specific header paths such as `response.headers.X-Bitrix24-User`
 - use `exclude_fields` when you want the optimized default non-raw result minus a few branches
 - `request.raw` / `response.raw` are materialized only when explicitly requested in `fields`
 - filtering is not involved here; projection only changes returned result shape

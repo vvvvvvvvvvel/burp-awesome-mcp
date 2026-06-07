@@ -116,20 +116,18 @@ class WebSocketQueryServiceTest {
     }
 
     @Test
-    fun `get websocket messages should fetch by ids via websocket history filter`() {
+    fun `get websocket messages should fetch by ids from a plain history snapshot`() {
         val id = 77
         val target = mockWebSocketItem(id = id, webSocketId = 900)
-        every { proxy.webSocketHistory(any<ProxyWebSocketHistoryFilter>()) } answers {
-            val filter = firstArg<ProxyWebSocketHistoryFilter>()
-            listOf(target).filter { filter.matches(it) }
-        }
+        every { proxy.webSocketHistory() } returns listOf(target)
 
         val result = service.getWebSocketMessages(GetProxyWebSocketMessagesInput(ids = listOf(id)))
 
         assertEquals(1, result.found)
         assertEquals(id, result.results.first().id)
-        verify(exactly = 1) { proxy.webSocketHistory(any<ProxyWebSocketHistoryFilter>()) }
-        verify(exactly = 0) { proxy.webSocketHistory() }
+        // By-ids uses a single plain snapshot + binary search, avoiding a per-entry JNI callback.
+        verify(exactly = 1) { proxy.webSocketHistory() }
+        verify(exactly = 0) { proxy.webSocketHistory(any<ProxyWebSocketHistoryFilter>()) }
     }
 
     @Test

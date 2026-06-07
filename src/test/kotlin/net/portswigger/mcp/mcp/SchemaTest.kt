@@ -325,4 +325,23 @@ class SchemaTest {
                 .any { (it["type"] as JsonPrimitive).content == "object" }
         assertTrue(hasObject)
     }
+
+    @Test
+    fun `send request options schema should describe redirection mode values`() {
+        val schema = asInputSchema(SendHttp1RequestInput.serializer())
+        val properties = schema.properties as JsonObject
+        val requestOptions = properties["request_options"] as JsonObject
+        val anyOf = requestOptions["anyOf"] as JsonArray
+        val objectBranch =
+            anyOf
+                .map { it as JsonObject }
+                .first { (it["type"] as JsonPrimitive).content == "object" }
+        val requestOptionProperties = objectBranch["properties"] as JsonObject
+        val redirectionMode = requestOptionProperties["redirection_mode"] as JsonObject
+        val description = (redirectionMode["description"] as JsonPrimitive).content
+
+        assertTrue(description.contains("always"))
+        assertTrue(description.contains("never"))
+        assertTrue(description.contains("follow"))
+    }
 }

@@ -37,9 +37,16 @@ class HistoryQueryService(
                 limit = normalizedLimit,
                 idDirection = input.idDirection,
             ) { item ->
+                // Cheapest checks first, regex last. matchesHttpHistoryFilter reads handle metadata
+                // and only materializes the response when a status/mime filter needs it; the scope
+                // check materializes the request; item.contains(regex) materializes the full
+                // request+response bytes, so it runs only for entries that survived every filter.
+                if (!matchesHttpHistoryFilter(item, filter)) return@collectFilteredPage false
+                if (filter.requestResponse.inScopeOnly && !isHttpHistoryItemInScope(item)) {
+                    return@collectFilteredPage false
+                }
                 if (regexPattern != null && !item.contains(regexPattern)) return@collectFilteredPage false
-                (!filter.requestResponse.inScopeOnly || isHttpHistoryItemInScope(item)) &&
-                    matchesHttpHistoryFilter(item, filter)
+                true
             }
         if (selected.items.isEmpty()) {
             requireConfiguredProjectScopeForInScopeOnly(
@@ -462,14 +469,18 @@ class HistoryQueryService(
 
     private fun fetchHttpHistoryByIds(ids: Set<Int>): Map<Int, ProxyHttpRequestResponse> {
         if (ids.isEmpty()) return emptyMap()
-        return api.proxy().history { item -> item.id() in ids }.associateBy { it.id() }
+        // Proxy history is append-ordered by monotonically increasing id, so we take one plain
+        // snapshot and binary-search each id. The predicate overload (history { it.id() in ids })
+        // invokes our lambda across the whole history via a JNI callback per entry, which dominates
+        // cost on large histories; this avoids all of it.
+        return locateAscendingById(api.proxy().history(), ids) { it.id() }
     }
 
     private fun fetchWebSocketHistory(): List<ProxyWebSocketMessage> = api.proxy().webSocketHistory()
 
     private fun fetchWebSocketHistoryByIds(ids: Set<Int>): Map<Int, ProxyWebSocketMessage> {
         if (ids.isEmpty()) return emptyMap()
-        return api.proxy().webSocketHistory { item -> item.id() in ids }.associateBy { it.id() }
+        return locateAscendingById(api.proxy().webSocketHistory(), ids) { it.id() }
     }
 
     private fun fetchSiteMap(): List<HttpRequestResponse> = api.siteMap().requestResponses()
@@ -480,22 +491,47 @@ class HistoryQueryService(
     ): Boolean {
         if (filter.listenerPorts != null && item.listenerPort() !in filter.listenerPorts) return false
 
-        val request = runCatching { item.finalRequest() }.getOrElse { item.request() }
-        val host = runCatching { request.httpService().host() }.getOrDefault("")
+        val rr = filter.requestResponse
+
+        // Method/host/time/hasResponse come straight off the history handle (index metadata) and
+        // never materialize the request or response bytes.
+        if (rr.methods != null) {
+            val method = runCatching { item.method().uppercase() }.getOrDefault("")
+            if (method !in rr.methods) return false
+        }
+        if (rr.hostPattern != null) {
+            val host = runCatching { item.host() }.getOrDefault("")
+            if (!rr.hostPattern.matcher(host).find()) return false
+        }
 
         val hasResponse = runCatching { item.hasResponse() }.getOrDefault(false)
-        return matchesRequestResponseFilter(
-            filter = filter.requestResponse,
-            request = request,
-            requestHost = host,
-            hasResponse = hasResponse,
-            responseProvider = {
-                runCatching {
-                    if (hasResponse) item.response() else null
-                }.getOrNull()
-            },
-            sentAtProvider = { runCatching { item.time().toInstant() }.getOrNull() },
-        )
+        if (rr.hasResponse != null && hasResponse != rr.hasResponse) return false
+
+        if (rr.timeFrom != null || rr.timeTo != null) {
+            val sentAt = runCatching { item.time().toInstant() }.getOrNull() ?: return false
+            if (rr.timeFrom != null && sentAt.isBefore(rr.timeFrom)) return false
+            if (rr.timeTo != null && sentAt.isAfter(rr.timeTo)) return false
+        }
+
+        // Only status/mime filters need the response body; materialize it lazily and once.
+        val responseNeeded = rr.statusCodes != null || rr.mimeTypes != null || rr.inferredMimeTypes != null
+        if (responseNeeded) {
+            val response = runCatching { if (hasResponse) item.response() else null }.getOrNull()
+            if (rr.statusCodes != null) {
+                val statusCode = response?.statusCode()?.toInt() ?: return false
+                if (statusCode !in rr.statusCodes) return false
+            }
+            if (rr.mimeTypes != null) {
+                val candidates = response?.let(::responseMimeCandidates) ?: return false
+                if (candidates.none { it in rr.mimeTypes }) return false
+            }
+            if (rr.inferredMimeTypes != null) {
+                val inferred = response?.let(::responseInferredMimeCandidate) ?: return false
+                if (inferred !in rr.inferredMimeTypes) return false
+            }
+        }
+
+        return true
     }
 
     private fun matchesWebSocketFilter(
@@ -543,6 +579,37 @@ private data class PageSelection<T>(
     val total: Int,
     val items: List<T>,
 )
+
+/**
+ * Locates items by id in a list assumed to be sorted ascending by id (proxy/websocket history is
+ * append-ordered), using a binary search per requested id instead of a full scan. Ids that are not
+ * present are simply absent from the result.
+ */
+private inline fun <T> locateAscendingById(
+    items: List<T>,
+    ids: Set<Int>,
+    idSelector: (T) -> Int,
+): Map<Int, T> {
+    if (ids.isEmpty() || items.isEmpty()) return emptyMap()
+    val result = HashMap<Int, T>(ids.size)
+    for (id in ids) {
+        var low = 0
+        var high = items.lastIndex
+        while (low <= high) {
+            val mid = (low + high) ushr 1
+            val midId = idSelector(items[mid])
+            when {
+                midId < id -> low = mid + 1
+                midId > id -> high = mid - 1
+                else -> {
+                    result[id] = items[mid]
+                    break
+                }
+            }
+        }
+    }
+    return result
+}
 
 private inline fun <K, T> indexByRequestedKeys(
     requestedKeys: List<K>,
